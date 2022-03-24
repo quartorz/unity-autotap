@@ -61,8 +61,7 @@ namespace Sample
 			autoTap.Setup(canvas, _marker);
 			autoTap.Scenario = new Group(autoTap, new Repeat {Count = 5}, new[]
 			{
-				new ReturnToTitle.Config().Generate(autoTap),
-				new Login.Config().Generate(autoTap),
+				new Relogin.Config().Generate(autoTap),
 				new Tap.Config
 				{
 					RepeatWhile = new Repeat {Count = 1},

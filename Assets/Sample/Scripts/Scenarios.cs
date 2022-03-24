@@ -321,5 +321,25 @@ namespace Sample
 				}
 			}
 		}
+
+		public class Relogin : Group
+		{
+			public new class Config : ScenarioConfig
+			{
+				public override Scenario Generate(global::AutoTap.AutoTap owner)
+				{
+					return new Relogin(owner, this);
+				}
+			}
+
+			Relogin(global::AutoTap.AutoTap owner, Config config)
+				: base(owner, config.RepeatWhile, new[]
+				{
+					new ReturnToTitle.Config().Generate(owner),
+					new Login.Config().Generate(owner),
+				})
+			{
+			}
+		}
 	}
 }
