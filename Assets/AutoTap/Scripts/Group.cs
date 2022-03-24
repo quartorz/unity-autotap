@@ -1,7 +1,7 @@
+#if !DISABLE_AUTOTAP
 using System.Linq;
 using UnityEngine;
 
-#if !DISABLE_AUTOTAP
 namespace AutoTap
 {
 	public class Group : Scenario<Group.Config>
@@ -16,13 +16,11 @@ namespace AutoTap
 			}
 		}
 
-		public override bool Active => base.Active && _active;
+		public override bool Active { get; protected set; }
 		public override string Status => Current?.Active == true ? Current.Status : null;
 
 		readonly Scenario[] _scenarios;
 		int _currentIndex;
-
-		bool _active;
 
 		public Scenario Current => _scenarios.Length != 0 && _currentIndex < _scenarios.Length
 			? _scenarios[_currentIndex]
@@ -47,7 +45,7 @@ namespace AutoTap
 		void MoveToNext()
 		{
 			var start = _currentIndex;
-			while (RepeatWhile.Value && !_scenarios[_currentIndex].Active)
+			while (RepeatWhile.Value && !_scenarios[_currentIndex].IsActiveAndRepeatable)
 			{
 				if (++_currentIndex >= _scenarios.Length)
 				{
@@ -60,7 +58,7 @@ namespace AutoTap
 				_scenarios[_currentIndex].Prepare();
 				if (_currentIndex == start)
 				{
-					_active = false;
+					Active = false;
 					break;
 				}
 			}
@@ -70,11 +68,11 @@ namespace AutoTap
 		{
 			if (!(Current is { } scenario))
 			{
-				_active = false;
+				Active = false;
 				return;
 			}
 
-			_active = true;
+			Active = true;
 
 			scenario.UpdateActive();
 		}
@@ -83,7 +81,7 @@ namespace AutoTap
 		{
 			if (!(Current is { } scenario))
 			{
-				_active = false;
+				Active = false;
 				return;
 			}
 
@@ -107,12 +105,12 @@ namespace AutoTap
 			Current.RepeatWhile.Update(deltaTime);
 			Current.UpdateActive();
 
-			if (Current.Active)
+			if (Current.IsActiveAndRepeatable)
 			{
 				Current.OnPreUpdate(deltaTime);
 			}
 
-			if (!Current.Active)
+			if (!Current.IsActiveAndRepeatable)
 			{
 				MoveToNext();
 				if (RepeatWhile.Value && Current.Active)
@@ -124,7 +122,7 @@ namespace AutoTap
 
 		public override void OnUpdate(int index)
 		{
-			if (Current.Active)
+			if (Current.IsActiveAndRepeatable)
 			{
 				Current.OnUpdate(index);
 			}
@@ -132,7 +130,7 @@ namespace AutoTap
 
 		public override void OnPostUpdate(float deltaTime)
 		{
-			if (Current.Active)
+			if (Current.IsActiveAndRepeatable)
 			{
 				Current.OnPostUpdate(deltaTime);
 			}
