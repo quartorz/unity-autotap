@@ -42,10 +42,7 @@ namespace Sample
 
 		public abstract class ScenarioBase<TConfig> : Scenario<TConfig> where TConfig : ScenarioConfig
 		{
-			public override bool Active => base.Active && ActiveSelf;
-
-			protected bool ActiveSelf;
-
+			public override bool Active { get; protected set; }
 
 			protected ScenarioBase(global::AutoTap.AutoTap owner, TConfig config) : base(owner, config)
 			{
@@ -75,7 +72,7 @@ namespace Sample
 			public override void UpdateActive()
 			{
 				_titleScreen = _screen as TitleScreen;
-				ActiveSelf = _mainCanvas != null && _titleScreen != null;
+				Active = _mainCanvas != null && _titleScreen != null;
 			}
 
 			public override void OnPreUpdate(float deltaTime)
@@ -108,7 +105,7 @@ namespace Sample
 
 			public override void UpdateActive()
 			{
-				ActiveSelf = _mainCanvas != null && _screen is HomeScreen;
+				Active = _mainCanvas != null && _screen is HomeScreen;
 			}
 
 			public override void OnPreUpdate(float deltaTime)
@@ -168,7 +165,7 @@ namespace Sample
 
 			public override void UpdateActive()
 			{
-				ActiveSelf = _screen.GetType() == _screenType;
+				Active = _screen.GetType() == _screenType;
 			}
 
 			public override void OnPreUpdate(float deltaTime)
@@ -180,7 +177,7 @@ namespace Sample
 
 				if (_target == null)
 				{
-					ActiveSelf = false;
+					Active = false;
 				}
 			}
 
@@ -218,7 +215,7 @@ namespace Sample
 
 			public override void UpdateActive()
 			{
-				ActiveSelf = _screen is HomeScreen;
+				Active = _screen is HomeScreen;
 			}
 
 			public override void Prepare()
@@ -281,7 +278,7 @@ namespace Sample
 
 			public override void UpdateActive()
 			{
-				ActiveSelf = _screen is HomeScreen;
+				Active = _screen is HomeScreen;
 			}
 
 			public override void OnPreUpdate(float deltaTime)

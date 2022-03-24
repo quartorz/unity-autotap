@@ -9,10 +9,12 @@ namespace AutoTap
 	{
 		protected AutoTap Owner;
 
-		public virtual bool Active => RepeatWhile.Value;
+		public abstract bool Active { get; protected set; }
 		public virtual string Status => null;
 
 		public abstract Condition RepeatWhile { get; }
+
+		public bool IsActiveAndRepeatable => Active && RepeatWhile.Value;
 
 		protected Scenario(AutoTap owner = null)
 		{
