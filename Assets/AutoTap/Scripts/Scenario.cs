@@ -7,7 +7,7 @@ namespace AutoTap
 {
 	public abstract class Scenario : IDisposable
 	{
-		protected AutoTap Owner;
+		protected AutoTapBase Owner;
 
 		public abstract bool Active { get; protected set; }
 		public virtual string Status => null;
@@ -16,7 +16,7 @@ namespace AutoTap
 
 		public bool IsActiveAndRepeatable => Active && RepeatWhile.Value;
 
-		protected Scenario(AutoTap owner = null)
+		protected Scenario(AutoTapBase owner = null)
 		{
 			Owner = owner;
 		}
@@ -111,12 +111,12 @@ namespace AutoTap
 
 		protected IEnumerable<T> GetComponents<T>(Component root, bool includeInactive = false) where T : Component
 		{
-			return AutoTap.ComponentFinder<T>.GetComponents(root, includeInactive);
+			return AutoTapBase.ComponentFinder<T>.GetComponents(root, includeInactive);
 		}
 
 		protected T GetComponent<T>(Component root, string name, bool includeInactive = false) where T : Component
 		{
-			return AutoTap.ComponentFinder<T>.GetComponent(root, name, includeInactive);
+			return AutoTapBase.ComponentFinder<T>.GetComponent(root, name, includeInactive);
 		}
 	}
 
@@ -125,7 +125,7 @@ namespace AutoTap
 		protected TConfig Config;
 		public override Condition RepeatWhile => Config.RepeatWhile;
 
-		protected Scenario(AutoTap owner, TConfig config) : base(owner)
+		protected Scenario(AutoTapBase owner, TConfig config) : base(owner)
 		{
 			Config = config;
 		}

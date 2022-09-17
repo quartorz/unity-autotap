@@ -13,7 +13,7 @@ namespace Sample
 	{
 		[SerializeField] Canvas canvas;
 
-		global::AutoTap.AutoTap _autoTap;
+		AutoTapBase _autoTapBase;
 		Texture2D _texture;
 		Sprite _marker;
 
@@ -34,21 +34,21 @@ namespace Sample
 
 		public void StopCurrentAutoTap()
 		{
-			if (global::AutoTap.AutoTap.Current is { } autoTap)
+			if (AutoTapBase.Current is { } autoTap)
 			{
 				autoTap.Stop();
 				autoTap.Dispose();
 			}
 
-			_autoTap = null;
+			_autoTapBase = null;
 		}
 
 		public void StartRandomTap()
 		{
 			StopCurrentAutoTap();
-			_autoTap = new RandomTap();
-			_autoTap.Setup(canvas, _marker);
-			_autoTap.Start();
+			_autoTapBase = new RandomTap();
+			_autoTapBase.Setup(canvas, _marker);
+			_autoTapBase.Start();
 		}
 
 		public void StartScenarioBasedAutoTap()
@@ -56,7 +56,7 @@ namespace Sample
 			StopCurrentAutoTap();
 
 			var autoTap = new ScenarioBasedAutoTap();
-			_autoTap = autoTap;
+			_autoTapBase = autoTap;
 
 			autoTap.Setup(canvas, _marker);
 			autoTap.Scenario = new Group(autoTap, new Repeat {Count = 5}, new[]
@@ -79,7 +79,7 @@ namespace Sample
 			StopCurrentAutoTap();
 
 			var autoTap = new ScenarioBasedAutoTap();
-			_autoTap = autoTap;
+			_autoTapBase = autoTap;
 
 			autoTap.Setup(canvas, _marker);
 			autoTap.SetJson(json);
@@ -88,17 +88,17 @@ namespace Sample
 
 		void Update()
 		{
-			if (_autoTap != null)
+			if (_autoTapBase != null)
 			{
-				if (!_autoTap.Enabled)
+				if (!_autoTapBase.Enabled)
 				{
-					_autoTap.Dispose();
-					_autoTap = null;
+					_autoTapBase.Dispose();
+					_autoTapBase = null;
 					return;
 				}
 
-				_autoTap.Update(Time.deltaTime);
-				foreach (var log in _autoTap.GetLatestLog())
+				_autoTapBase.Update(Time.deltaTime);
+				foreach (var log in _autoTapBase.GetLatestLog())
 				{
 					Debug.Log(log);
 				}

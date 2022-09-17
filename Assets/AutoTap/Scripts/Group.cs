@@ -10,7 +10,7 @@ namespace AutoTap
 		{
 			public ScenarioConfig[] Scenarios;
 
-			public override Scenario Generate(AutoTap owner)
+			public override Scenario Generate(AutoTapBase owner)
 			{
 				return new Group(owner, this);
 			}
@@ -26,12 +26,12 @@ namespace AutoTap
 			? _scenarios[_currentIndex]
 			: null;
 
-		public Group(AutoTap owner, Config config) : base(owner, config)
+		public Group(AutoTapBase owner, Config config) : base(owner, config)
 		{
 			_scenarios = config.Scenarios.Select(s => s.Generate(owner)).ToArray();
 		}
 
-		public Group(AutoTap owner, Condition repeatWhile, Scenario[] scenarios)
+		public Group(AutoTapBase owner, Condition repeatWhile, Scenario[] scenarios)
 			: base(owner, new Config {RepeatWhile = repeatWhile})
 		{
 			_scenarios = scenarios;

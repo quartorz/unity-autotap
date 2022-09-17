@@ -1,13 +1,12 @@
 using System;
 using AutoTap;
 using UnityEngine;
-using Base = AutoTap.AutoTap;
 
 namespace Sample
 {
-	public abstract class AutoTap : Base
+	public abstract class AutoTap : AutoTapBase
 	{
-		new class LogItem : Base.LogItem
+		new class LogItem : AutoTapBase.LogItem
 		{
 		}
 
@@ -33,7 +32,7 @@ namespace Sample
 
 		protected override void CreateLog(
 			int index, GameObject target, Vector2 startPosition, Vector2 endPosition, float duration,
-			out Base.LogItem logItem)
+			out AutoTapBase.LogItem logItem)
 		{
 			logItem = _logItems[index];
 			logItem.Index = index;

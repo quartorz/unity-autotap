@@ -8,12 +8,12 @@ namespace AutoTap
 	public abstract class ScenarioConfig
 	{
 		public Condition RepeatWhile = new Once();
-		public abstract Scenario Generate(AutoTap owner);
+		public abstract Scenario Generate(AutoTapBase owner);
 	}
 
 	public class ScenarioConfig<TScenario> : ScenarioConfig where TScenario : Scenario<ScenarioConfig<TScenario>>
 	{
-		public override Scenario Generate(AutoTap owner)
+		public override Scenario Generate(AutoTapBase owner)
 		{
 			return (TScenario)Activator.CreateInstance(
 				typeof(TScenario), BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, null,

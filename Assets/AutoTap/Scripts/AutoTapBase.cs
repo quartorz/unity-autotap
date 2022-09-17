@@ -7,9 +7,9 @@ using UnityEngine.UI;
 
 namespace AutoTap
 {
-	public abstract class AutoTap : IDisposable
+	public abstract class AutoTapBase : IDisposable
 	{
-		public static AutoTap Current { get; private set; }
+		public static AutoTapBase Current { get; private set; }
 
 		public class LogItem
 		{
@@ -81,9 +81,9 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 			float _currentTime;
 
 			readonly List<RaycastResult> _list;
-			readonly AutoTap _owner;
+			readonly AutoTapBase _owner;
 
-			public Tap(Image marker, int id, AutoTap owner, List<RaycastResult> raycastResults)
+			public Tap(Image marker, int id, AutoTapBase owner, List<RaycastResult> raycastResults)
 			{
 				_marker = marker;
 				_eventData = new PointerEventData(EventSystem.current)

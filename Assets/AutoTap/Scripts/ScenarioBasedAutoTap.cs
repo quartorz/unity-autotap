@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace AutoTap
 {
-	public abstract class ScenarioBasedAutoTap : AutoTap
+	public abstract class ScenarioBasedAutoTap : AutoTapBase
 	{
 		public Scenario Scenario;
 

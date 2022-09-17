@@ -44,7 +44,7 @@ namespace Sample
 		{
 			public override bool Active { get; protected set; }
 
-			protected ScenarioBase(global::AutoTap.AutoTap owner, TConfig config) : base(owner, config)
+			protected ScenarioBase(AutoTapBase owner, TConfig config) : base(owner, config)
 			{
 			}
 		}
@@ -60,7 +60,7 @@ namespace Sample
 			TitleScreen _titleScreen;
 			RectTransform _target;
 
-			Login(global::AutoTap.AutoTap owner, Config config) : base(owner, config)
+			Login(AutoTapBase owner, Config config) : base(owner, config)
 			{
 			}
 
@@ -99,7 +99,7 @@ namespace Sample
 
 			RectTransform _target;
 
-			ReturnToTitle(global::AutoTap.AutoTap owner, Config config) : base(owner, config)
+			ReturnToTitle(AutoTapBase owner, Config config) : base(owner, config)
 			{
 			}
 
@@ -137,7 +137,7 @@ namespace Sample
 				public string Screen;
 				public string Target;
 
-				public override Scenario Generate(global::AutoTap.AutoTap owner)
+				public override Scenario Generate(AutoTapBase owner)
 				{
 					return new Tap(owner, this);
 				}
@@ -146,7 +146,7 @@ namespace Sample
 			Type _screenType;
 			RectTransform _target;
 
-			Tap(global::AutoTap.AutoTap owner, Config config) : base(owner, config)
+			Tap(AutoTapBase owner, Config config) : base(owner, config)
 			{
 				_screenType = Type.GetType($"Sample.{base.Config.Screen}");
 
@@ -196,7 +196,7 @@ namespace Sample
 			{
 				public string Text;
 
-				public override Scenario Generate(global::AutoTap.AutoTap owner)
+				public override Scenario Generate(AutoTapBase owner)
 				{
 					return new CreateItem(owner, this);
 				}
@@ -209,7 +209,7 @@ namespace Sample
 
 			int _count;
 
-			CreateItem(global::AutoTap.AutoTap owner, Config config) : base(owner, config)
+			CreateItem(AutoTapBase owner, Config config) : base(owner, config)
 			{
 			}
 
@@ -272,7 +272,7 @@ namespace Sample
 
 			float _timer;
 
-			DeleteItem(global::AutoTap.AutoTap owner, ScenarioConfig<DeleteItem> config) : base(owner, config)
+			DeleteItem(AutoTapBase owner, ScenarioConfig<DeleteItem> config) : base(owner, config)
 			{
 			}
 
@@ -326,13 +326,13 @@ namespace Sample
 		{
 			public new class Config : ScenarioConfig
 			{
-				public override Scenario Generate(global::AutoTap.AutoTap owner)
+				public override Scenario Generate(AutoTapBase owner)
 				{
 					return new Relogin(owner, this);
 				}
 			}
 
-			Relogin(global::AutoTap.AutoTap owner, Config config)
+			Relogin(AutoTapBase owner, Config config)
 				: base(owner, config.RepeatWhile, new[]
 				{
 					new ReturnToTitle.Config().Generate(owner),
