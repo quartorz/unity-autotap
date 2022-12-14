@@ -1,21 +1,23 @@
-using System;
-using System.Linq;
-using AutoTap;
-using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
+using System.Linq;
+using AutoTap;
+using UnityEngine;
 using static Sample.ScenarioBasedAutoTap;
 
 namespace Sample
 {
 	public class DebugManager : MonoBehaviour
 	{
-		[SerializeField] Canvas canvas;
+		[SerializeField] Canvas mainCanvas;
+		[SerializeField] Transform debugCanvas;
+		[SerializeField] ConfigEditor configEditor;
 
 		AutoTapBase _autoTapBase;
 		Texture2D _texture;
 		Sprite _marker;
+		ConfigEditor _configEditor;
 
 		void Start()
 		{
@@ -41,13 +43,19 @@ namespace Sample
 			}
 
 			_autoTapBase = null;
+
+			if (_configEditor != null)
+			{
+				Destroy(_configEditor.gameObject);
+				_configEditor = null;
+			}
 		}
 
 		public void StartRandomTap()
 		{
 			StopCurrentAutoTap();
 			_autoTapBase = new RandomTap();
-			_autoTapBase.Setup(canvas, _marker);
+			_autoTapBase.Setup(mainCanvas, _marker);
 			_autoTapBase.Start();
 		}
 
@@ -58,7 +66,7 @@ namespace Sample
 			var autoTap = new ScenarioBasedAutoTap();
 			_autoTapBase = autoTap;
 
-			autoTap.Setup(canvas, _marker);
+			autoTap.Setup(mainCanvas, _marker);
 			autoTap.Scenario = new Group(autoTap, new Repeat {Count = 5}, new[]
 			{
 				new Relogin.Config().Generate(autoTap),
@@ -74,6 +82,37 @@ namespace Sample
 			autoTap.Start();
 		}
 
+		public void StartEditableAutoTap()
+		{
+			StopCurrentAutoTap();
+
+			var autoTap = new ScenarioBasedAutoTap();
+			_autoTapBase = autoTap;
+
+			var repeat = new Repeat {Count = 100};
+
+			autoTap.Setup(mainCanvas, _marker);
+			autoTap.Scenario = new Group(autoTap, new Once(), new[]
+			{
+				new Relogin.Config().Generate(autoTap),
+				new Group(autoTap, repeat, new[]
+				{
+					new CreateItem.Config().Generate(autoTap),
+					new DeleteItem.Config().Generate(autoTap),
+				}),
+			});
+
+			if (_configEditor == null)
+			{
+				_configEditor = Instantiate(configEditor, debugCanvas);
+			}
+
+			_configEditor.Setup(repeat);
+			_configEditor.gameObject.SetActive(true);
+
+			autoTap.Start();
+		}
+
 		public void StartJsonBasedAutoTap(string json)
 		{
 			StopCurrentAutoTap();
@@ -81,7 +120,7 @@ namespace Sample
 			var autoTap = new ScenarioBasedAutoTap();
 			_autoTapBase = autoTap;
 
-			autoTap.Setup(canvas, _marker);
+			autoTap.Setup(mainCanvas, _marker);
 			autoTap.SetJson(json);
 			autoTap.Start();
 		}
@@ -128,6 +167,11 @@ namespace Sample
 				if (GUILayout.Button("Start Scenario Based Auto Tap"))
 				{
 					self.StartScenarioBasedAutoTap();
+				}
+
+				if (GUILayout.Button("Start Editable Auto Tap"))
+				{
+					self.StartEditableAutoTap();
 				}
 
 				if (GUILayout.Button("Start JSON Based Auto Tap"))

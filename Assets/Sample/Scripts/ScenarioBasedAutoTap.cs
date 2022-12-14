@@ -31,6 +31,11 @@ namespace Sample
 			base.OnPreUpdate(deltaTime);
 		}
 
+		protected override bool ToBeIgnored(Transform transform)
+		{
+			return base.ToBeIgnored(transform) || !transform.IsChildOf(_mainCanvas.transform);
+		}
+
 		public void SetJson(string json)
 		{
 			Scenario = Impl(JObject.Parse(json)).Generate(this);

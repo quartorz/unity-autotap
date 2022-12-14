@@ -26,22 +26,22 @@ namespace AutoTap
 	public class Repeat : Condition
 	{
 		public int Count;
-		public int RestCount;
+		public int CurrentCount;
 
 		public override void Prepare()
 		{
-			RestCount = Count;
-			Value = RestCount > 0;
+			CurrentCount = 0;
+			Value = CurrentCount < Count;
 		}
 
 		public override void Update(float deltaTime)
 		{
-			Value = RestCount > 0;
+			Value = CurrentCount < Count;
 		}
 
 		public override void OnLoop()
 		{
-			Value = --RestCount > 0;
+			Value = ++CurrentCount < Count;
 		}
 	}
 }
