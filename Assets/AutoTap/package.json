@@ -1,6 +1,6 @@
 {
     "name": "red.quart.unity-autotap",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "auto tap",
     "displayName": "Unity AutoTap",
     "unity": "2020.3",

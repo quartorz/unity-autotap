@@ -570,7 +570,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				_floats[i] = _fourCorners[i].x;
 			}
 
-			var x = Mathf.Lerp(
+			var x = Mathf.LerpUnclamped(
 				Mathf.Min(_floats),
 				Mathf.Max(_floats),
 				tx);
@@ -580,7 +580,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				_floats[i] = _fourCorners[i].y;
 			}
 
-			var y = Mathf.Lerp(
+			var y = Mathf.LerpUnclamped(
 				Mathf.Min(_floats),
 				Mathf.Max(_floats),
 				ty);
@@ -615,7 +615,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				_floats[i] = _fourCorners[i].x;
 			}
 
-			var x = Mathf.Lerp(
+			var x = Mathf.LerpUnclamped(
 				Mathf.Min(_floats),
 				Mathf.Max(_floats),
 				tx);
@@ -625,7 +625,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				_floats[i] = _fourCorners[i].y;
 			}
 
-			var y = Mathf.Lerp(
+			var y = Mathf.LerpUnclamped(
 				Mathf.Min(_floats),
 				Mathf.Max(_floats),
 				ty);
