@@ -441,7 +441,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 			return false;
 		}
 
-		public IEnumerable<LogItem> GetLatestLog()
+		public IEnumerable<LogItem> GetLatestLogs()
 		{
 			foreach (var logItem in _logItems)
 			{
