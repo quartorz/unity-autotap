@@ -227,6 +227,14 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 					_eventData.clickCount = 1;
 				}
 
+				var currentOverGo = _eventData.pointerCurrentRaycast.gameObject;
+
+				if (_eventData.pointerEnter != currentOverGo)
+				{
+					HandlePointerExitAndEnter(currentOverGo);
+					_eventData.pointerEnter = currentOverGo;
+				}
+
 				_eventData.pointerDrag = ExecuteEvents.GetEventHandler<IDragHandler>(target);
 				if (_eventData.pointerDrag != null)
 				{
@@ -262,6 +270,13 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				if (_eventData.dragging)
 				{
 					EndDrag(target);
+				}
+
+				var currentOverGo = _eventData.pointerCurrentRaycast.gameObject;
+				if (currentOverGo != _eventData.pointerEnter)
+				{
+					HandlePointerExitAndEnter(null);
+					HandlePointerExitAndEnter(currentOverGo);
 				}
 
 				_marker.gameObject.SetActive(false);
@@ -308,6 +323,94 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 
 				_eventData.dragging = false;
 				_eventData.pointerDrag = null;
+			}
+
+			void HandlePointerExitAndEnter(GameObject newEnterTarget)
+			{
+				if (newEnterTarget == null)
+				{
+					_eventData.pointerEnter = null;
+				}
+
+				if (_eventData.pointerEnter == null)
+				{
+					foreach (var hovered in _eventData.hovered)
+					{
+						ExecuteEvents.Execute(hovered, _eventData, ExecuteEvents.pointerExitHandler);
+					}
+					_eventData.hovered.Clear();
+
+					if (newEnterTarget == null)
+					{
+						return;
+					}
+				}
+
+				if (_eventData.pointerEnter == newEnterTarget)
+				{
+					return;
+				}
+
+				GameObject commonRoot = null;
+
+				if (_eventData.pointerEnter != null)
+				{
+					var t1 = _eventData.pointerEnter.transform;
+					do
+					{
+						var t2 = newEnterTarget.transform;
+
+						do
+						{
+							if (t1 == t2)
+							{
+								commonRoot = t1.gameObject;
+								goto Break;
+							}
+
+							t2 = t2.parent;
+						} while (t2 != null);
+
+						t1 = t1.parent;
+					} while (t1 != null);
+					Break: ;
+				}
+
+				if (_eventData.pointerEnter != null)
+				{
+					var commonRootTransform = commonRoot != null ? commonRoot.transform : null;
+					var t = _eventData.pointerEnter.transform;
+
+					do
+					{
+						if (t == commonRootTransform)
+						{
+							break;
+						}
+
+						ExecuteEvents.Execute(t.gameObject, _eventData, ExecuteEvents.pointerExitHandler);
+						_eventData.hovered.Remove(t.gameObject);
+						t = t.parent;
+					} while (t != null);
+				}
+
+				_eventData.pointerEnter = newEnterTarget;
+
+				var target = newEnterTarget.transform;
+
+				do
+				{
+					var targetGameObject = target.gameObject;
+
+					if (targetGameObject == commonRoot)
+					{
+						break;
+					}
+
+					ExecuteEvents.Execute(target.gameObject, _eventData, ExecuteEvents.pointerEnterHandler);
+					_eventData.hovered.Add(target.gameObject);
+					target = target.parent;
+				} while (target != null);
 			}
 		}
 
