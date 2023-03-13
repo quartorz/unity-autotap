@@ -137,7 +137,7 @@ namespace Sample
 				}
 
 				_autoTapBase.Update(Time.deltaTime);
-				foreach (var log in _autoTapBase.GetLatestLog())
+				foreach (var log in _autoTapBase.GetLatestLogs())
 				{
 					Debug.Log(log);
 				}
