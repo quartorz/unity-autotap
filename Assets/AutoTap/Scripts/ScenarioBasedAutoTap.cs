@@ -22,7 +22,7 @@ namespace AutoTap
 			Scenario.UpdateActive();
 			Scenario.Prepare();
 
-			if (!Scenario.Active)
+			if (!Scenario.IsActiveAndRepeatable)
 			{
 				Stop();
 			}
@@ -35,17 +35,17 @@ namespace AutoTap
 
 		protected override void OnPreUpdate(float deltaTime)
 		{
-			if (Scenario.Active)
+			if (Scenario.IsActiveAndRepeatable)
 			{
 				Scenario.RepeatWhile.Update(deltaTime);
 				Scenario.UpdateActive();
-				if (Scenario.Active)
+				if (Scenario.IsActiveAndRepeatable)
 				{
 					Scenario.OnPreUpdate(deltaTime);
 				}
 			}
 
-			if (!Scenario.Active && Enabled)
+			if (!Scenario.IsActiveAndRepeatable && Enabled)
 			{
 				Stop();
 			}
@@ -53,12 +53,12 @@ namespace AutoTap
 
 		protected override void Update(int index)
 		{
-			if (Scenario.Active)
+			if (Scenario.IsActiveAndRepeatable)
 			{
 				Scenario.OnUpdate(index);
 			}
 
-			if (!Scenario.Active && Enabled)
+			if (!Scenario.IsActiveAndRepeatable && Enabled)
 			{
 				Stop();
 			}
@@ -66,12 +66,12 @@ namespace AutoTap
 
 		protected override void OnPostUpdate(float deltaTime)
 		{
-			if (Scenario.Active)
+			if (Scenario.IsActiveAndRepeatable)
 			{
 				Scenario.OnPostUpdate(deltaTime);
 			}
 
-			if (!Scenario.Active && Enabled)
+			if (!Scenario.IsActiveAndRepeatable && Enabled)
 			{
 				Stop();
 			}
