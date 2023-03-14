@@ -308,6 +308,9 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				}
 				else
 				{
+					HandlePointerExitAndEnter(Cursor.lockState == CursorLockMode.Locked
+						? null
+						: _eventData.pointerCurrentRaycast.gameObject);
 					ExecuteEvents.Execute(_eventData.pointerDrag, _eventData, ExecuteEvents.dragHandler);
 				}
 			}
