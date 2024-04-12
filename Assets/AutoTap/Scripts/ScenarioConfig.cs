@@ -7,7 +7,7 @@ namespace UnityAutoTap
 	[Serializable]
 	public abstract class ScenarioConfig
 	{
-		public Condition RepeatWhile = new Once();
+		public Condition RepeatCondition = new Once();
 		public abstract Scenario Generate(AutoTapBase owner);
 	}
 

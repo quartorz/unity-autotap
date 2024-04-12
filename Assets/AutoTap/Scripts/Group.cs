@@ -31,8 +31,8 @@ namespace UnityAutoTap
 			_scenarios = config.Scenarios.Select(s => s.Generate(owner)).ToArray();
 		}
 
-		public Group(AutoTapBase owner, Condition repeatWhile, Scenario[] scenarios)
-			: base(owner, new Config {RepeatWhile = repeatWhile})
+		public Group(AutoTapBase owner, Condition repeatCondition, Scenario[] scenarios)
+			: base(owner, new Config {RepeatCondition = repeatCondition})
 		{
 			_scenarios = scenarios;
 		}
@@ -45,15 +45,15 @@ namespace UnityAutoTap
 		void MoveToNext()
 		{
 			var start = _currentIndex;
-			while (RepeatWhile.Value && !_scenarios[_currentIndex].IsActiveAndRepeatable)
+			while (RepeatCondition.Value && !_scenarios[_currentIndex].IsActiveAndRepeatable)
 			{
 				if (++_currentIndex >= _scenarios.Length)
 				{
-					RepeatWhile.OnLoop();
+					RepeatCondition.OnLoop();
 					_currentIndex = 0;
 				}
 
-				_scenarios[_currentIndex].RepeatWhile.Prepare();
+				_scenarios[_currentIndex].RepeatCondition.Prepare();
 				_scenarios[_currentIndex].UpdateActive();
 				_scenarios[_currentIndex].Prepare();
 				if (_currentIndex == start)
@@ -85,7 +85,7 @@ namespace UnityAutoTap
 				return;
 			}
 
-			scenario.RepeatWhile.Prepare();
+			scenario.RepeatCondition.Prepare();
 			scenario.Prepare();
 			if (!scenario.Active)
 			{
@@ -95,14 +95,14 @@ namespace UnityAutoTap
 
 		public override void OnPreUpdate(float deltaTime)
 		{
-			RepeatWhile.Update(deltaTime);
+			RepeatCondition.Update(deltaTime);
 
-			if (!RepeatWhile.Value)
+			if (!RepeatCondition.Value)
 			{
 				return;
 			}
 
-			Current.RepeatWhile.Update(deltaTime);
+			Current.RepeatCondition.Update(deltaTime);
 			Current.UpdateActive();
 
 			if (Current.IsActiveAndRepeatable)
@@ -113,7 +113,7 @@ namespace UnityAutoTap
 			if (!Current.IsActiveAndRepeatable)
 			{
 				MoveToNext();
-				if (RepeatWhile.Value && Current.Active)
+				if (RepeatCondition.Value && Current.Active)
 				{
 					Current.OnPreUpdate(deltaTime);
 				}

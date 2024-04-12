@@ -72,12 +72,12 @@ namespace Sample
 				new Relogin.Config().Generate(autoTap),
 				new Tap.Config
 				{
-					RepeatWhile = new Repeat {Count = 1},
+					RepeatCondition = new Repeat {Count = 1},
 					Screen = "HomeScreen",
 					Target = "AddItem"
 				}.Generate(autoTap),
-				new CreateItem.Config {RepeatWhile = new Repeat {Count = 20}}.Generate(autoTap),
-				new DeleteItem.Config {RepeatWhile = new Repeat {Count = 3}}.Generate(autoTap),
+				new CreateItem.Config {RepeatCondition = new Repeat {Count = 20}}.Generate(autoTap),
+				new DeleteItem.Config {RepeatCondition = new Repeat {Count = 3}}.Generate(autoTap),
 			});
 			autoTap.Start();
 		}
@@ -185,13 +185,13 @@ namespace Sample
 		'Type': 'Login'
 	}, {
 		'Type': 'CreateItem',
-		'RepeatWhile': {
+		'RepeatCondition': {
 			'Type': 'Repeat',
 			'Count': 20,
 		}
 	}, {
 		'Type': 'DeleteItem',
-		'RepeatWhile': {
+		'RepeatCondition': {
 			'Type': 'Repeat',
 			'Count': 20,
 		}

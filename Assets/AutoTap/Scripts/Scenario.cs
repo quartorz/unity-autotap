@@ -12,9 +12,9 @@ namespace UnityAutoTap
 		public abstract bool Active { get; protected set; }
 		public virtual string Status => null;
 
-		public abstract Condition RepeatWhile { get; }
+		public abstract Condition RepeatCondition { get; }
 
-		public bool IsActiveAndRepeatable => Active && RepeatWhile.Value;
+		public bool IsActiveAndRepeatable => Active && RepeatCondition.Value;
 
 		protected Scenario(AutoTapBase owner = null)
 		{
@@ -123,7 +123,7 @@ namespace UnityAutoTap
 	public abstract class Scenario<TConfig> : Scenario where TConfig : ScenarioConfig
 	{
 		protected TConfig Config;
-		public override Condition RepeatWhile => Config.RepeatWhile;
+		public override Condition RepeatCondition => Config.RepeatCondition;
 
 		protected Scenario(AutoTapBase owner, TConfig config) : base(owner)
 		{

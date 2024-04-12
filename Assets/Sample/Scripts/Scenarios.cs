@@ -185,7 +185,7 @@ namespace Sample
 			{
 				if (TryTap(index, _mainCanvas, _target, 0.1f))
 				{
-					RepeatWhile.OnLoop();
+					RepeatCondition.OnLoop();
 				}
 			}
 		}
@@ -256,7 +256,7 @@ namespace Sample
 				if (TryTap(index, _mainCanvas, _target, 0.1f) && _target.name == "Submit")
 				{
 					_inputField.text = base.Config.Text ?? $"Item {++_count}";
-					RepeatWhile.OnLoop();
+					RepeatCondition.OnLoop();
 				}
 			}
 		}
@@ -310,7 +310,7 @@ namespace Sample
 
 				if (TryTap(index, _mainCanvas, _button, 0.1f))
 				{
-					RepeatWhile.OnLoop();
+					RepeatCondition.OnLoop();
 					_timer = 0.4f;
 				}
 				else
@@ -333,7 +333,7 @@ namespace Sample
 			}
 
 			Relogin(AutoTapBase owner, Config config)
-				: base(owner, config.RepeatWhile, new[]
+				: base(owner, config.RepeatCondition, new[]
 				{
 					new ReturnToTitle.Config().Generate(owner),
 					new Login.Config().Generate(owner),

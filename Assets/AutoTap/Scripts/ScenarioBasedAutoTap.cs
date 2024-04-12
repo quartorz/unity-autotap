@@ -18,7 +18,7 @@ namespace UnityAutoTap
 
 		protected override void OnStart()
 		{
-			Scenario.RepeatWhile.Prepare();
+			Scenario.RepeatCondition.Prepare();
 			Scenario.UpdateActive();
 			Scenario.Prepare();
 
@@ -37,7 +37,7 @@ namespace UnityAutoTap
 		{
 			if (Scenario.IsActiveAndRepeatable)
 			{
-				Scenario.RepeatWhile.Update(deltaTime);
+				Scenario.RepeatCondition.Update(deltaTime);
 				Scenario.UpdateActive();
 				if (Scenario.IsActiveAndRepeatable)
 				{

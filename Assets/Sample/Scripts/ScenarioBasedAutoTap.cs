@@ -42,8 +42,8 @@ namespace Sample
 
 			ScenarioConfig Impl(JObject obj)
 			{
-				var repeatWhile = obj.Value<JObject>("RepeatWhile");
-				obj.Remove("RepeatWhile");
+				var repeatCondition = obj.Value<JObject>("RepeatCondition");
+				obj.Remove("RepeatCondition");
 
 				ScenarioConfig config;
 				var type = obj.Value<string>("Type");
@@ -78,9 +78,9 @@ namespace Sample
 						break;
 				}
 
-				if (repeatWhile != null)
+				if (repeatCondition != null)
 				{
-					config.RepeatWhile = ParseCondition(repeatWhile);
+					config.RepeatCondition = ParseCondition(repeatCondition);
 				}
 
 				return config;
