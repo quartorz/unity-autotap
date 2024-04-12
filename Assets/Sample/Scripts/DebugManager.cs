@@ -2,7 +2,7 @@
 using UnityEditor;
 #endif
 using System.Linq;
-using AutoTap;
+using UnityAutoTap;
 using UnityEngine;
 using static Sample.ScenarioBasedAutoTap;
 

@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace AutoTap
+namespace UnityAutoTap
 {
 	public abstract class Scenario : IDisposable
 	{

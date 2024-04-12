@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace AutoTap
+namespace UnityAutoTap
 {
 	public abstract class AutoTapBase : IDisposable
 	{

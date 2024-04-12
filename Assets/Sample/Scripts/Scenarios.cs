@@ -1,6 +1,6 @@
 using System;
 using System.Linq;
-using AutoTap;
+using UnityAutoTap;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;

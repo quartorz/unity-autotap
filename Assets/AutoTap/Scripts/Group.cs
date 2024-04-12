@@ -2,7 +2,7 @@
 using System.Linq;
 using UnityEngine;
 
-namespace AutoTap
+namespace UnityAutoTap
 {
 	public class Group : Scenario<Group.Config>
 	{

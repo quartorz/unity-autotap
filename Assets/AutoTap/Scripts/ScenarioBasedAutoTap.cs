@@ -1,7 +1,7 @@
 #if !DISABLE_AUTOTAP
 using UnityEngine;
 
-namespace AutoTap
+namespace UnityAutoTap
 {
 	public abstract class ScenarioBasedAutoTap : AutoTapBase
 	{

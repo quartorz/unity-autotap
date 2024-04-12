@@ -1,9 +1,9 @@
 using System;
 using System.Linq;
-using AutoTap;
+using UnityAutoTap;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
-using Base = AutoTap.ScenarioBasedAutoTap;
+using Base = UnityAutoTap.ScenarioBasedAutoTap;
 
 namespace Sample
 {
@@ -95,7 +95,7 @@ namespace Sample
 					case "":
 						throw new Exception($"invalid type: {type}");
 					default:
-						if (typeof(Condition).Assembly.GetType($"AutoTap.{type}") is { } t)
+						if (typeof(Condition).Assembly.GetType($"UnityAutoTap.{type}") is { } t)
 						{
 							return (Condition)obj.ToObject(t);
 						}

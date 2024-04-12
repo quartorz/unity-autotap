@@ -1,5 +1,5 @@
 #if !DISABLE_AUTOTAP
-namespace AutoTap
+namespace UnityAutoTap
 {
 	public class Condition
 	{

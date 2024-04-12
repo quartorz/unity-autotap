@@ -2,7 +2,7 @@
 using System;
 using System.Reflection;
 
-namespace AutoTap
+namespace UnityAutoTap
 {
 	[Serializable]
 	public abstract class ScenarioConfig

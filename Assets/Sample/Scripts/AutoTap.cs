@@ -1,5 +1,5 @@
 using System;
-using AutoTap;
+using UnityAutoTap;
 using UnityEngine;
 
 namespace Sample
