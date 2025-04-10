@@ -1,4 +1,4 @@
-#if !DISABLE_AUTOTAP
+#if ENABLE_AUTOTAP
 using UnityEngine;
 
 namespace UnityAutoTap
