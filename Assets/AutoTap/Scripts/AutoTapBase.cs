@@ -214,6 +214,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				else
 				{
 					fired = ExecuteEvents.GetEventHandler<IPointerClickHandler>(target);
+					_eventData.pointerPress = fired;
 				}
 
 				var time = Time.unscaledTime;
