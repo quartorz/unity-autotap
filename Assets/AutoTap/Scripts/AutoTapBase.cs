@@ -619,6 +619,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				return null;
 			}
 
+#if USE_LEGACY_INPUT
 			if (!Input.multiTouchEnabled)
 			{
 				foreach (var t in _taps)
@@ -629,6 +630,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 					}
 				}
 			}
+#endif
 
 			var tap = _taps[index];
 
