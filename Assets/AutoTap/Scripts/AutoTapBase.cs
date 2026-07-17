@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Assertions;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
@@ -476,6 +477,8 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 		protected virtual void SetupInternal(
 			Canvas canvasForMarker, Sprite markerSprite, int tapCount)
 		{
+			Assert.IsTrue(tapCount > 0 && tapCount < 20, "Tap count must be between 1 and 20");
+
 			_tapCount = tapCount;
 			Enabled = false;
 			_canvas = canvasForMarker;
@@ -495,7 +498,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				marker.sprite = markerSprite;
 				marker.SetNativeSize();
 				marker.rectTransform.anchorMin = marker.rectTransform.anchorMax = Vector2.zero;
-				_taps[i] = new Tap(marker, i + 100, this, _raycastResults);
+				_taps[i] = new Tap(marker, 19 - i, this, _raycastResults);
 			}
 		}
 
