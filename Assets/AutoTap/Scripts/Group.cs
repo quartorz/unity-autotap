@@ -135,6 +135,14 @@ namespace UnityAutoTap
 				Current.OnPostUpdate(deltaTime);
 			}
 		}
+
+		/// <summary>
+		/// Delivered to <see cref="Current"/>, which may differ from the scenario that fired the tap.
+		/// </summary>
+		public override void OnTapCompleted(int index, AutoTapBase.LogItem logItem)
+		{
+			Current?.OnTapCompleted(index, logItem);
+		}
 	}
 }
 #endif

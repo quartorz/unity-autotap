@@ -15,6 +15,7 @@ namespace UnityAutoTap
 		public class LogItem
 		{
 			internal bool Active;
+			internal bool CompletedThisFrame;
 			public int Index;
 			public DateTime DateTime;
 			public GameObject Target;
@@ -22,6 +23,10 @@ namespace UnityAutoTap
 			public Vector2? DragTo;
 			public int FrameCount;
 			public float Duration;
+			public bool Completed;
+			public bool ClickExecuted;
+			public GameObject ClickTarget;
+			public int CompletedFrameCount;
 
 			public override string ToString()
 			{
@@ -80,12 +85,15 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 			Vector2 _endPosition;
 			float _duration;
 			float _currentTime;
+			LogItem _logItem;
 
+			readonly int _index;
 			readonly List<RaycastResult> _list;
 			readonly AutoTapBase _owner;
 
-			public Tap(Image marker, int id, AutoTapBase owner, List<RaycastResult> raycastResults)
+			public Tap(Image marker, int index, int id, AutoTapBase owner, List<RaycastResult> raycastResults)
 			{
+				_index = index;
 				_marker = marker;
 				_eventData = new PointerEventData(EventSystem.current)
 				{
@@ -94,6 +102,11 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				};
 				_owner = owner;
 				_list = raycastResults;
+			}
+
+			public void AttachLog(LogItem logItem)
+			{
+				_logItem = logItem;
 			}
 
 			public void Dispose()
@@ -139,7 +152,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 					PointerUp(null);
 				}
 
-				if (_currentTime < _duration)
+				if (_currentTime < _duration || _duration <= 0)
 				{
 					_currentTime += deltaTime;
 					var t = _duration <= 0 ? 1 : Mathf.InverseLerp(0, _duration, _currentTime);
@@ -285,10 +298,12 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				ExecuteEvents.Execute(_eventData.pointerPress, _eventData, ExecuteEvents.pointerUpHandler);
 
 				var clickHandler = ExecuteEvents.GetEventHandler<IPointerClickHandler>(target);
+				var pointerClick = _eventData.pointerClick;
+				var clickExecuted = false;
 
 				if (_eventData.pointerClick == clickHandler && _eventData.eligibleForClick)
 				{
-					ExecuteEvents.Execute(_eventData.pointerClick, _eventData, ExecuteEvents.pointerClickHandler);
+					clickExecuted = ExecuteEvents.Execute(_eventData.pointerClick, _eventData, ExecuteEvents.pointerClickHandler);
 				}
 
 				if (_eventData.pointerDrag != null && _eventData.dragging)
@@ -317,6 +332,17 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				}
 
 				_marker.gameObject.SetActive(false);
+
+				if (_logItem != null)
+				{
+					_logItem.Completed = true;
+					_logItem.ClickExecuted = clickExecuted;
+					_logItem.ClickTarget = clickExecuted ? pointerClick : null;
+					_logItem.CompletedFrameCount = Time.frameCount;
+					_logItem.CompletedThisFrame = true;
+					_owner.OnTapCompleted(_index, _logItem);
+					_logItem = null;
+				}
 			}
 
 			void BeginDrag()
@@ -498,7 +524,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				marker.sprite = markerSprite;
 				marker.SetNativeSize();
 				marker.rectTransform.anchorMin = marker.rectTransform.anchorMax = Vector2.zero;
-				_taps[i] = new Tap(marker, 19 - i, this, _raycastResults);
+				_taps[i] = new Tap(marker, i, 19 - i, this, _raycastResults);
 			}
 		}
 
@@ -557,14 +583,18 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 
 			Current = null;
 			Enabled = false;
+			for (var i = 0; i < _logItems.Length; ++i)
+			{
+				if (_logItems[i] is { } logItem)
+				{
+					logItem.Active = false;
+					logItem.CompletedThisFrame = false;
+				}
+			}
+
 			foreach (var tap in _taps)
 			{
 				tap.Stop();
-			}
-
-			for (var i = 0; i < _logItems.Length; ++i)
-			{
-				_logItems[i] = null;
 			}
 
 			OnStop();
@@ -586,6 +616,14 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 			logItem.DragTo = (startPosition == endPosition) ? null : (Vector2?)endPosition;
 			logItem.Duration = duration;
 			logItem.FrameCount = Time.frameCount;
+			logItem.Completed = false;
+			logItem.ClickExecuted = false;
+			logItem.ClickTarget = null;
+			logItem.CompletedFrameCount = 0;
+		}
+
+		protected virtual void OnTapCompleted(int index, LogItem logItem)
+		{
 		}
 
 		protected virtual bool ToBeIgnored(Transform transform)
@@ -598,6 +636,17 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 			foreach (var logItem in _logItems)
 			{
 				if (logItem is {Active: true})
+				{
+					yield return logItem;
+				}
+			}
+		}
+
+		public IEnumerable<LogItem> GetLatestCompletedLogs()
+		{
+			foreach (var logItem in _logItems)
+			{
+				if (logItem is {CompletedThisFrame: true})
 				{
 					yield return logItem;
 				}
@@ -619,6 +668,7 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				if (_logItems[i] is { } logItem)
 				{
 					logItem.Active = false;
+					logItem.CompletedThisFrame = false;
 				}
 
 				if (tap.Active)
@@ -686,6 +736,8 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 				{
 					logItem.Active = true;
 				}
+
+				tap.AttachLog(_logItems[index]);
 
 				return tap.PointerPress;
 			}

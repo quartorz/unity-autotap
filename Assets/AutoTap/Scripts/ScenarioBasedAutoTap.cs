@@ -76,6 +76,11 @@ namespace UnityAutoTap
 				Stop();
 			}
 		}
+
+		protected override void OnTapCompleted(int index, LogItem logItem)
+		{
+			Scenario?.OnTapCompleted(index, logItem);
+		}
 	}
 }
 #endif

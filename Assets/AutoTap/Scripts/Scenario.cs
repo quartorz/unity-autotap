@@ -45,6 +45,10 @@ namespace UnityAutoTap
 		{
 		}
 
+		public virtual void OnTapCompleted(int index, AutoTapBase.LogItem logItem)
+		{
+		}
+
 		protected GameObject Fire(int index, Vector2 from, Vector2 to, float duration)
 		{
 			return Owner.Fire(index, from, to, duration);
