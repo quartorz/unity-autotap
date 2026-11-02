@@ -257,6 +257,51 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
+		public void OneSequenceThatPressesTheBackKeyAgainAndAgainPressesItOnceEveryFrame()
+		{
+			// A sequence is one operation, so the device is not busy between its presses. A release is made in a later
+			// input update than its press, but it can share an input update with the next press.
+			var performed = new List<int>();
+			var action = new InputAction("back", InputActionType.Button, "*/{Cancel}");
+			action.performed += _ => performed.Add(_frame);
+			action.Enable();
+			var sequence = new ControlSequence().Press(Key.Escape);
+			for (var i = 0; i < 4; ++i)
+			{
+				sequence.Release(Key.Escape).Press(Key.Escape);
+			}
+
+			sequence.Release(Key.Escape);
+			var item = _autoTap.Device("Keyboard", sequence);
+
+			try
+			{
+				for (_frame = 0; _frame < 8; ++_frame)
+				{
+					Frame();
+				}
+			}
+			finally
+			{
+				action.Disable();
+				action.Dispose();
+			}
+
+			TestContext.WriteLine($"The back key was pressed in the frames {string.Join(", ", performed)}");
+			Assert.That(performed, Is.EqualTo(new[] { 0, 1, 2, 3, 4 }), "five presses, one per frame");
+			Assert.That(item.Completed, Is.True);
+			Assert.That(item.EndReason, Is.EqualTo(AutoTapBase.EndReason.Finished));
+			var presses = _changes.OfType<ButtonDown>().ToList();
+			var releases = _changes.OfType<ButtonUp>().ToList();
+			Assert.That(presses, Has.Count.EqualTo(5));
+			Assert.That(releases, Has.Count.EqualTo(5));
+			for (var i = 0; i < 5; ++i)
+			{
+				Assert.That(releases[i].UpdateCount, Is.GreaterThan(presses[i].UpdateCount), $"the release of press {i} is in a later input update");
+			}
+		}
+
+		[Test]
 		public void TheBackKeyOfTheDeviceItselfCanBePressedAndReleasedInOneInputUpdate()
 		{
 			var performed = new List<int>();
