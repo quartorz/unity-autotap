@@ -174,6 +174,11 @@ namespace Sample
 					self.StartEditableAutoTap();
 				}
 
+				if (GUILayout.Button("Start Input Examples"))
+				{
+					self.StartJsonBasedAutoTap(InputExamples.Json);
+				}
+
 				if (GUILayout.Button("Start JSON Based Auto Tap"))
 				{
 					self.StartJsonBasedAutoTap(@"
