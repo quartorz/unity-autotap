@@ -1,6 +1,7 @@
 #if ENABLE_AUTOTAP
 using System;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 
 namespace UnityAutoTap
 {
@@ -53,7 +54,7 @@ namespace UnityAutoTap
 		/// </exception>
 		public static VirtualInputSession Acquire()
 		{
-			throw new NotImplementedException();
+			return VirtualInputCore.Acquire();
 		}
 
 		/// <summary>
@@ -63,7 +64,7 @@ namespace UnityAutoTap
 		/// <returns><c>true</c> for a virtual device, <c>false</c> for a real device or <c>null</c>.</returns>
 		public static bool IsVirtual(InputDevice device)
 		{
-			throw new NotImplementedException();
+			return device != null && VirtualInputCore.IsVirtualName(device.name);
 		}
 	}
 
@@ -77,8 +78,8 @@ namespace UnityAutoTap
 		/// Gives a new finger of the virtual touchscreen.
 		/// </summary>
 		/// <returns>
-		/// The finger, or <c>null</c> if all fingers (at most 10 at a time, that is
-		/// <see cref="UnityEngine.InputSystem.LowLevel.TouchscreenState.MaxTouches"/>) are in use.
+		/// The finger, or <c>null</c> if all fingers are in use. At most 10 fingers, the number of touches that a
+		/// touchscreen has, are in use at a time.
 		/// </returns>
 		VirtualFinger NewFinger();
 
@@ -117,45 +118,73 @@ namespace UnityAutoTap
 	/// </summary>
 	public sealed class VirtualInputSession : IVirtualInput, IDisposable
 	{
-		internal VirtualInputSession()
+		readonly VirtualInputCore _core;
+		bool _disposed;
+
+		internal VirtualInputSession(VirtualInputCore core)
 		{
+			_core = core;
 		}
 
 		/// <inheritdoc/>
 		public VirtualFinger NewFinger()
 		{
-			throw new NotImplementedException();
+			ThrowIfDisposed();
+			return _core.NewFinger();
 		}
 
 		/// <inheritdoc/>
 		public VirtualPointer GetPointer(string layout, int number = 0)
 		{
+			ThrowIfDisposed();
 			throw new NotImplementedException();
 		}
 
 		/// <inheritdoc/>
 		public VirtualDevice GetDevice(string layout, int number = 0)
 		{
+			ThrowIfDisposed();
 			throw new NotImplementedException();
 		}
 
 		/// <inheritdoc/>
-		public InputChangeReader Reader => throw new NotImplementedException();
+		public InputChangeReader Reader => _core.Reader;
 
 		/// <inheritdoc/>
 		public event Action InputUpdated
 		{
-			add => throw new NotImplementedException();
-			remove => throw new NotImplementedException();
+			add => _core.InputUpdated += value;
+			remove => _core.InputUpdated -= value;
 		}
 
 		/// <summary>
 		/// Gives up the reference to the virtual input. Releasing what is pressed and removing the devices happens
 		/// when the last reference is given up.
 		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// When the last reference is given up and something is still pressed, the release is queued and the devices
+		/// are removed a few input updates later, after the UI processed the release. When nothing is pressed they are
+		/// removed at once. <see cref="Reader"/> and <see cref="InputUpdated"/> keep working until then.
+		/// </para>
+		/// </remarks>
 		public void Dispose()
 		{
-			throw new NotImplementedException();
+			if (_disposed)
+			{
+				return;
+			}
+
+			_disposed = true;
+			_core.ReleaseReference();
+		}
+
+		void ThrowIfDisposed()
+		{
+			if (_disposed)
+			{
+				throw new ObjectDisposedException(nameof(VirtualInputSession));
+			}
 		}
 	}
 }
