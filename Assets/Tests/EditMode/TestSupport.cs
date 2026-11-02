@@ -365,6 +365,13 @@ namespace UnityAutoTap.Tests
 		/// <summary>
 		/// A point given as fractions of the screen size.
 		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// In edit mode <see cref="Screen"/> is the size of the window that the editor drew last, not of the Game view.
+		/// It can be as small as the status bar (40 pixels high), so a test that has to move a pointer beyond the drag
+		/// threshold (10 pixels) moves it by more than a quarter of the height.
+		/// </para>
+		/// </remarks>
 		public static Vector2 At(float x, float y)
 		{
 			return new Vector2(Screen.width * x, Screen.height * y);

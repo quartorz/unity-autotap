@@ -284,9 +284,11 @@ namespace UnityAutoTap.Tests
 		[Test]
 		public void TwoFingersAreHandledIndependently()
 		{
-			var source = _scene.Add<DragHandler>("Source", 0.1f, 0.1f, 0.3f, 0.3f);
+			// In edit mode Screen is the size of the window that was drawn last, which can be the status bar (40 pixels
+			// high), so the drag has to be longer than the drag threshold (10 pixels) at that height.
+			var source = _scene.Add<DragHandler>("Source", 0.1f, 0.05f, 0.3f, 0.95f);
 			var button = _scene.Add<ClickHandler>("Button", 0.6f, 0.6f, 0.8f, 0.8f);
-			var drag = _autoTap.Drag(0, TestScene.At(0.2f, 0.2f), TestScene.At(0.2f, 0.4f), 0.1f);
+			var drag = _autoTap.Drag(0, TestScene.At(0.2f, 0.1f), TestScene.At(0.2f, 0.9f), 0.1f);
 			var tap = _autoTap.Tap(1, TestScene.At(0.7f, 0.7f), 0.1f);
 
 			RunUntilCompleted(drag);
