@@ -19,8 +19,13 @@ namespace UnityAutoTap
 	/// </para>
 	/// <list type="bullet">
 	/// <item><description>
-	/// In the Editor, the Input System settings that decide whether input reaches the game are replaced so that
-	/// input is delivered regardless of focus. The original settings are restored when the last session is disposed.
+	/// In the Editor only, the Input System settings that decide whether input reaches the game are replaced by a
+	/// copy with <see cref="InputSettings.backgroundBehavior"/> set to
+	/// <see cref="InputSettings.BackgroundBehavior.IgnoreFocus"/> and
+	/// <see cref="InputSettings.editorInputBehaviorInPlayMode"/> set to
+	/// <see cref="InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView"/>, so that input is
+	/// delivered regardless of focus. The original settings are restored when the last session is disposed. A player
+	/// keeps the settings of the project.
 	/// </description></item>
 	/// <item><description>
 	/// On every platform, the pointer behavior of <see cref="UnityEngine.InputSystem.UI.InputSystemUIInputModule"/>

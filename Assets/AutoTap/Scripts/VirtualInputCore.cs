@@ -31,8 +31,8 @@ namespace UnityAutoTap
 	}
 
 	/// <summary>
-	/// The one object behind <see cref="VirtualInput"/>: the virtual devices, the replaced settings and the
-	/// bookkeeping that follows what the input updates did with the queued events.
+	/// The one object behind <see cref="VirtualInput"/>: the virtual devices, the settings that the Editor replaces
+	/// and the bookkeeping that follows what the input updates did with the queued events.
 	/// </summary>
 	internal sealed class VirtualInputCore
 	{
@@ -53,8 +53,10 @@ namespace UnityAutoTap
 			new Dictionary<InputSystemUIInputModule, UIPointerBehavior>();
 		readonly List<InputDevice> _devices = new List<InputDevice>();
 
+#if UNITY_EDITOR
 		readonly InputSettings _originalSettings;
 		readonly InputSettings _replacedSettings;
+#endif
 
 		Touchscreen _touchscreen;
 		int _references;
@@ -66,6 +68,9 @@ namespace UnityAutoTap
 
 		VirtualInputCore()
 		{
+#if UNITY_EDITOR
+			// In the Editor the Game view may have no focus (the Editor may run in the background), and these settings
+			// decide whether the game gets input then. A player keeps the settings of the project.
 			_originalSettings = InputSystem.settings;
 			_replacedSettings = UnityEngine.Object.Instantiate(_originalSettings);
 			_replacedSettings.hideFlags = HideFlags.HideAndDontSave;
@@ -73,6 +78,7 @@ namespace UnityAutoTap
 			_replacedSettings.editorInputBehaviorInPlayMode =
 				InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
 			InputSystem.settings = _replacedSettings;
+#endif
 
 			_reader = new InputChangeReader(VirtualInput.IsVirtual);
 			_reader.Changed += OnChange;
@@ -209,15 +215,22 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// <c>false</c> if the Input System was reset behind the back of this object, which makes its settings and
-		/// its devices stale.
+		/// <c>false</c> if the Input System was reset behind the back of this object, which makes its devices and, in
+		/// the Editor, its replaced settings stale.
 		/// </summary>
 		bool IsConsistent()
 		{
-			if (_tornDown || InputSystem.settings != _replacedSettings)
+			if (_tornDown)
 			{
 				return false;
 			}
+
+#if UNITY_EDITOR
+			if (InputSystem.settings != _replacedSettings)
+			{
+				return false;
+			}
+#endif
 
 			foreach (var device in _devices)
 			{
@@ -749,7 +762,7 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// Removes the devices, gives the settings back and stops listening, at once.
+		/// Removes the devices, gives the settings back (in the Editor) and stops listening, at once.
 		/// </summary>
 		void TearDown()
 		{
@@ -799,6 +812,7 @@ namespace UnityAutoTap
 
 			_modules.Clear();
 
+#if UNITY_EDITOR
 			if (InputSystem.settings == _replacedSettings)
 			{
 				InputSystem.settings = _originalSettings;
@@ -812,6 +826,7 @@ namespace UnityAutoTap
 			{
 				UnityEngine.Object.DestroyImmediate(_replacedSettings);
 			}
+#endif
 
 			_inputUpdated = null;
 		}

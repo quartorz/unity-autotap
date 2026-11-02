@@ -97,11 +97,11 @@ namespace UnityAutoTap.Tests.RealInput
 
 #if UNITY_EDITOR
 		[UnityTest]
-		public IEnumerator Acquire_ReplacesTheSettings_AndTheLastDisposePutsThemBack()
+		public IEnumerator Acquire_InTheEditor_ReplacesTheSettings_AndTheLastDisposePutsThemBack()
 		{
-			// While a session is alive, background behavior is IgnoreFocus and the Editor input behavior is
-			// AllDeviceInputAlwaysGoesToGameView, so that input arrives although the Game view has no focus (the Editor
-			// may run in the background); the original settings come back with the last dispose (documented on
+			// In the Editor, while a session is alive, background behavior is IgnoreFocus and the Editor input behavior
+			// is AllDeviceInputAlwaysGoesToGameView, so that input arrives although the Game view has no focus (the
+			// Editor may run in the background); the original settings come back with the last dispose (documented on
 			// VirtualInput).
 			var original = InputSystem.settings;
 			var backgroundBehavior = original.backgroundBehavior;
@@ -132,6 +132,28 @@ namespace UnityAutoTap.Tests.RealInput
 			Assert.That(InputSystem.settings, Is.SameAs(original));
 			Assert.That(InputSystem.settings.backgroundBehavior, Is.EqualTo(backgroundBehavior));
 			Assert.That(InputSystem.settings.editorInputBehaviorInPlayMode, Is.EqualTo(editorInputBehavior));
+		}
+#else
+		[UnityTest]
+		public IEnumerator Acquire_InAPlayer_LeavesTheSettingsOfTheProjectAlone()
+		{
+			// Only the Editor has its settings replaced (documented on VirtualInput); a player keeps the settings of
+			// the project while a session is alive and after it.
+			var original = InputSystem.settings;
+			var backgroundBehavior = original.backgroundBehavior;
+			var editorInputBehavior = original.editorInputBehaviorInPlayMode;
+
+			var session = VirtualInput.Acquire();
+			_cleanups.Add(session.Dispose);
+			Assert.That(InputSystem.settings, Is.SameAs(original));
+			Assert.That(InputSystem.settings.backgroundBehavior, Is.EqualTo(backgroundBehavior));
+			Assert.That(InputSystem.settings.editorInputBehaviorInPlayMode, Is.EqualTo(editorInputBehavior));
+
+			session.Dispose();
+			yield return null;
+			yield return null;
+			Assert.That(InputSystem.settings, Is.SameAs(original));
+			Assert.That(InputSystem.settings.backgroundBehavior, Is.EqualTo(backgroundBehavior));
 		}
 #endif
 

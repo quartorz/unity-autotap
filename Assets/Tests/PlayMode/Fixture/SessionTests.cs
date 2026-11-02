@@ -123,11 +123,11 @@ namespace UnityAutoTap.Tests
 
 #if UNITY_EDITOR
 		[UnityTest]
-		public IEnumerator TheSettingsThatDecideWhetherInputArrives_AreReplacedWhileASessionIsAlive_AndComeBack()
+		public IEnumerator TheSettingsThatDecideWhetherInputArrives_AreReplacedInTheEditorWhileASessionIsAlive_AndComeBack()
 		{
-			// The focus related settings are replaced by IgnoreFocus and AllDeviceInputAlwaysGoesToGameView while a
-			// session is alive, whichever they were, and put back when the last session is disposed (documented on
-			// VirtualInput). Two sessions are counted.
+			// In the Editor the focus related settings are replaced by IgnoreFocus and
+			// AllDeviceInputAlwaysGoesToGameView while a session is alive, whichever they were, and put back when the
+			// last session is disposed (documented on VirtualInput). Two sessions are counted.
 			var settings = InputSystem.settings;
 			settings.backgroundBehavior = InputSettings.BackgroundBehavior.ResetAndDisableNonBackgroundDevices;
 			settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.PointersAndKeyboardsRespectGameViewFocus;
