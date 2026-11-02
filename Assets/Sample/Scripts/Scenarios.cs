@@ -110,13 +110,20 @@ namespace Sample
 
 			public override void OnPreUpdate(float deltaTime)
 			{
-				if (ScreenManager.Header.Menu.Opened)
+				var menu = ScreenManager.Header.Menu;
+				if (menu.Opened)
 				{
-					var button = GetComponents<Button>(ScreenManager.Header.Menu.transform).LastOrDefault();
+					var button = GetComponents<Button>(menu.transform).LastOrDefault();
 					if (button != null)
 					{
 						_target = button.transform as RectTransform;
 					}
+				}
+				else if (menu.gameObject.activeSelf)
+				{
+					// The menu is sliding. A press that is queued now is delivered after it stopped, onto the background
+					// of the menu, which closes it.
+					_target = null;
 				}
 				else
 				{
@@ -126,6 +133,13 @@ namespace Sample
 
 			public override void OnUpdate(int index)
 			{
+				// The button toggles the menu, and the presses of all the slots are delivered in the same frame, so a
+				// press from every slot would open and close it again and again.
+				if (index != 0)
+				{
+					return;
+				}
+
 				TryTap(index, _mainCanvas, _target, 0.1f);
 			}
 		}
