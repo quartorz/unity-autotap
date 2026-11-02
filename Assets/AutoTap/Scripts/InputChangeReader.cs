@@ -56,7 +56,8 @@ namespace UnityAutoTap
 	/// <item><description>
 	/// A control made of axes (a stick, a position, a tilt) is reported as one <see cref="ValueChanged"/> with its
 	/// vector value. The delta controls are not reported, except the <c>scroll</c> control, which is reported as
-	/// <see cref="Scrolled"/>. Synthetic controls (for example <c>up</c> of a stick) are not reported.
+	/// <see cref="Scrolled"/>. Synthetic controls (for example <c>up</c> of a stick, or the <c>inRange</c> of a pen)
+	/// are not reported.
 	/// </description></item>
 	/// <item><description>
 	/// A change that does not come from an event in the queue, such as the reset of a device, is reported as one

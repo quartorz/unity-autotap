@@ -129,10 +129,14 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// Creates an auto tap that operates the devices of <paramref name="input"/>. The caller owns
-		/// <paramref name="input"/>: this class never disposes it. Meant for replacing the Input System in tests.
+		/// Creates an auto tap that operates the devices of <paramref name="input"/>, a session that the caller shares
+		/// with this auto tap. The caller owns <paramref name="input"/>: this class never disposes it, and
+		/// <see cref="Start"/> does not acquire another session.
 		/// </summary>
-		/// <param name="input">The source of the virtual devices.</param>
+		/// <param name="input">
+		/// The session that supplies the virtual devices, as returned by <see cref="VirtualInput.Acquire"/>.
+		/// <c>null</c> makes the auto tap acquire its own session, as the other constructor does.
+		/// </param>
 		protected AutoTapBase(IVirtualInput input)
 		{
 			_ownsInput = input == null;
@@ -379,11 +383,16 @@ namespace UnityAutoTap
 		/// have one, in the order the items were fired. They are <see cref="LogEventKind.Completed"/> of
 		/// <list type="bullet">
 		/// <item><description>
-		/// items that were dropped (<see cref="EndReason.Dropped"/>) by that input update, and
+		/// items that were dropped (<see cref="EndReason.Dropped"/>) by that input update,
 		/// </description></item>
 		/// <item><description>
 		/// items that <see cref="Stop"/> ended since the previous input update, which are put into the sequence of
-		/// the next input update because their release is processed by it.
+		/// the next input update because their release is processed by it, and
+		/// </description></item>
+		/// <item><description>
+		/// items whose end changed no control, such as a hover that presses nothing or a <c>Set</c> of the value that
+		/// a control already has. Such an item has nothing to release, so it ends in the first input update after its
+		/// plan is over.
 		/// </description></item>
 		/// </list>
 		/// </para>

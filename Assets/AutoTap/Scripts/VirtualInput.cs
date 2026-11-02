@@ -35,8 +35,12 @@ namespace UnityAutoTap
 	/// </list>
 	/// <para>
 	/// When the last session is disposed, everything that is still pressed is released, and the virtual devices are
-	/// removed after the release was processed. Virtual devices that were left behind by a previous run are removed
-	/// at start-up and at <see cref="UnityEngine.Application.quitting"/>.
+	/// removed after the release was processed.
+	/// </para>
+	/// <para>
+	/// Virtual devices that a previous run left behind are removed at start-up, when a session is acquired while none
+	/// is alive, and at <see cref="UnityEngine.Application.quitting"/>. In the Editor, the virtual devices that are
+	/// still there when Play Mode is exited are removed at that point, without waiting for a release to be processed.
 	/// </para>
 	/// <para>
 	/// While virtual devices exist, <c>Touchscreen.current</c>, <c>Keyboard.current</c>, <c>Mouse.current</c>,
@@ -74,9 +78,18 @@ namespace UnityAutoTap
 	}
 
 	/// <summary>
-	/// The source of the virtual devices that <see cref="AutoTapBase"/> operates. Implemented by
-	/// <see cref="VirtualInputSession"/>; implement it to replace the Input System in tests.
+	/// The part of a session that <see cref="AutoTapBase"/> uses: the source of the virtual devices that it
+	/// operates, the reader of their changes and the notification at the end of each input update.
 	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// It is a way to share one session. <see cref="VirtualInputSession"/> is the only implementation, because the
+	/// virtual fingers, pointers and devices that its members return can only be created by a session. Pass the
+	/// session that <see cref="VirtualInput.Acquire"/> returned to <see cref="AutoTapBase(IVirtualInput)"/> so that
+	/// an auto tap and any other user of the same virtual devices, such as a replay, work on the same devices and
+	/// read the same <see cref="Reader"/>. The caller that acquired the session disposes it.
+	/// </para>
+	/// </remarks>
 	public interface IVirtualInput
 	{
 		/// <summary>

@@ -133,7 +133,7 @@ FirePen(Gesture.HoverAt(position).Set("pressure", 0.5f).Press().Hold(0.2f));
 | `Press(button)`, `Release(button)` | press or release one more button. |
 | `Scroll(delta)` | scroll once at the current position. Not for fingers. |
 | `Set(controlPath, value, seconds = 0)` | change a control (`pressure`, `radius`, `tilt`, ...) at once or gradually. For a finger the path is relative to the touch, and only `pressure` and `radius` exist. |
-| `Hold(seconds)`, `HoldUntil(condition, timeout)` | wait. The condition is evaluated once per `Update(float)`. |
+| `Hold(seconds)`, `HoldUntil(condition, timeout)` | wait. The condition is evaluated once per `Update(float)`, and by `Fire` if no step before it took time. |
 
 A gesture that does not fit its target (a `HoverAt` for a finger, a control that the device does not have) makes `Fire`
 throw `ArgumentException`. So does `FirePointer` with a layout that is a touchscreen or is not derived from `Pointer`.
@@ -142,8 +142,10 @@ The UI handles the primary button of any pointer and the right and middle button
 (forward, back, a pen's eraser and barrel buttons) are written to the device, for code that reads them, but they never
 reach the UI, and a `LogItem` that follows such a button has no `Target`, `ClickTarget` or other prediction.
 
-`FireScroll` takes two frames: the mouse hovers at `position` first, and the scroll is queued in the next frame, once
-the hover was processed, so that the pointer is already there when the scroll arrives.
+`FireScroll` is `FireMouse(Gesture.HoverAt(position).Scroll(delta))`, and there is no wait between the hover and the
+scroll: `Fire` queues both in the frame of the call, as two events, and one input update processes the hover and then the
+scroll. The input module puts the pointer over the UI there and scrolls it in the first frame after the call, also when
+the mouse is added by that very call.
 
 ### Other devices: `ControlSequence`
 
@@ -179,6 +181,10 @@ FireDevice("Accelerometer", new ControlSequence().Set("acceleration", new Vector
 Pressing a key does not enter a character, because a character depends on the keyboard layout. Use `Text` for that.
 Text and composition go to the keyboard (`Keyboard.onTextInput`, `Keyboard.onIMECompositionChange`) and are not read by
 `TMP_InputField` (see [What is not covered](#what-is-not-covered)).
+
+Do not `Set` a synthetic control, one that the Input System marks `synthetic`: the `inRange` of a pen, the `isTracked` of
+an XR device. It does not work as an input. The reader never reports it as a change, and a `Set` of `isTracked` on the
+generic XR layouts left the value at 0. A pen gesture puts the pen in range by itself.
 
 `FireDevice` throws `ArgumentException` for a usage error:
 
@@ -226,19 +232,31 @@ FireDevice("Keyboard", sequence);   // ten presses, one in each of ten consecuti
 
 ### What a `Fire` method does
 
-- It returns a `LogItem` that records the operation, and queues the first step. It returns `null` and queues nothing if
+- It returns a `LogItem` that records the operation, and queues the steps at the start of the plan that take no time. It
+  returns `null` and queues nothing if
   - a position is outside the screen,
   - the slot, or the virtual device, is still busy with the previous operation, until the end of it was processed,
   - the first step is a press and `ShouldNotPressOn` returns `true` for what is under it,
   - all 10 fingers of the touchscreen are in use.
-- The first step of a `FireDevice` sequence is queued by `FireDevice` if it takes no time: a press, a release, text, a
-  composition, or a value that is set at once. A sequence that begins with a wait or a gradual change queues nothing yet and is processed
-  once its first step is over.
+- `Fire` queues every step at the start of the plan that takes no time, not only the first one: the first step, and the
+  steps after it, up to the first step that takes time. A step takes time if it is a move or a change over seconds, or a
+  `Hold` or `HoldUntil` that has to wait; a `HoldUntil` whose condition is true already takes none, and `Fire`
+  evaluates it. The rest of the plan is carried out by `Update(float)` in the following frames, once what `Fire` queued
+  was processed. The rule is the one that `Update(float)` follows for the steps of a frame, so a step is queued in the
+  frame of `Fire` or in a later one whatever its place in the plan:
+
+  ```csharp
+  // One call, one input update: the stick moves, then South is pressed, then West.
+  FireGamepad(new ControlSequence().Set("leftStick", Vector2.right).Press(GamepadButton.South).Press("buttonWest").Hold(0.2f));
+  FireKey(Key.R, 0.1f, Key.LeftCtrl);   // Ctrl and R go down in the frame of the call, in this order
+  ```
 - A point that hits nothing is pressed all the same.
 - Steps that follow each other in one frame are queued as separate events, in the order of the plan: a `Ctrl` that
-  comes before an `R` is processed before it.
+  comes before an `R` is processed before it. Writing a modifier and a key in one event would not do for an ordered
+  `OneModifier` binding: it is not performed when the modifier and the key change in the same event. That is why every
+  step is an event of its own.
 - An operation never presses and releases in one input update, even with `Hold(0)`: the release goes into the next
-  frame. The same holds for the release at the end of an operation.
+  frame, also when the press was made by `Fire`. The same holds for the release at the end of an operation.
 - When the plan is over, what is pressed is released, in the opposite order, and every control that is not `dontReset`
   goes back to its default, the range of the Input System's soft reset. The position of a mouse or a pen is `dontReset`
   and stays, so the hover goes on. The controls of sensors are noisy, which makes them `dontReset` too, so a sensor keeps
@@ -279,8 +297,8 @@ prediction is refreshed when the press is processed.
 ## Samples
 
 `Assets/Sample` of this repository is a small app (a title screen, a home screen with a list, a menu in the header) and
-the auto taps that run it: `RandomTap`, and scenarios on `ScenarioBasedAutoTap`. Three scenarios put in input that is not a
-finger.
+the auto taps that run it: `RandomTap`, and scenarios on `ScenarioBasedAutoTap`. Three scenarios put in input that is not
+only a finger.
 
 | Example | Device | What it does |
 |---|---|---|
@@ -302,20 +320,31 @@ _item = FireMouse(Gesture
 
 // MoveAndSubmit: a flick for each step, then submit once the button reacted.
 var sequence = new ControlSequence();
-sequence.Set("leftStick", Vector2.right).Hold(0.1f).Set("leftStick", Vector2.zero).Hold(0.1f);
-sequence.Press(GamepadButton.South).HoldUntil(() => pad.SubmitCount > submitted, 1f).Release(GamepadButton.South);
+for (var i = 0; i < Mathf.Abs(goal - from); ++i)
+{
+	sequence.Set("leftStick", direction).Hold(0.1f).Set("leftStick", Vector2.zero).Hold(0.1f);
+}
+
+var submitted = _pad.SubmitCount;
+sequence.Press(GamepadButton.South).HoldUntil(() => _pad.SubmitCount > submitted, 1f).Release(GamepadButton.South);
 _item = FireGamepad(sequence);
 ```
 
 The examples are nested classes of the sample's `ScenarioBasedAutoTap`, so `SetJson` finds them by their names, and
-`InputExamples.Json` runs the three. Each one waits for the effect on the UI by itself: it keeps the `LogItem` and
-looks at `Completed` and `EndReason` in the following frames. Their scripts need objects in `SampleScene` that the other
-scenarios do not (the comment of each scenario lists them) and an `InputSystemUIInputModule` on the event system.
+`InputExamples.Json` logs in if the title screen is shown and then runs each of the three three times. Each one waits for
+the effect on the UI by itself: it keeps the `LogItem` and looks at `Completed` in the following frames (`HoverAndLeave`
+and `MoveAndSubmit` also look at `EndReason`, and log a warning if the operation did not end as `Finished`).
+
+`SampleScene` has what they need: an `InputSystemUIInputModule` with the default actions on the event system (its first
+selected object is the first button of the pad), a `MenuCancelHandler` on the `MenuButton`, and an `ExamplePanel` under
+the `DebugCanvas` with the `HoverTarget` (a `HoverHighlight`) and the `PadPanel` (three buttons and a `PadLabel`). The
+comment of each scenario lists what it needs, for a scene of your own. In Play Mode, press "Start Input Examples" in the
+Inspector of the `DebugManager` to run them; it calls `StartJsonBasedAutoTap(InputExamples.Json)`.
 
 ## When input arrives
 
 ```
-frame N      Update(float): Fire queues the events
+frame N      Update(float): Fire queues the steps at the start of the plan that take no time
 frame N + 1  input update (start of the frame): the Input System processes them, in the order they were queued
              event system: the input module delivers pointer, navigation and submit/cancel events
              Update(float): the next steps are queued
@@ -351,8 +380,8 @@ in afterwards.
 | `FrameCount`, `DateTime`, `ScreenPoint`, `DragTo` | what was asked for, when `Fire` was called. `ScreenPoint` is zero for a device without a position |
 | `Duration` | the time given to `Fire(index, position, duration)`, `Fire(index, from, to, duration)` or `FireKey(key, duration)`. `NaN` when a `Gesture` or a `ControlSequence` was given, and for the other `FireDevice` calls |
 | `Order`, `StartedFrameCount` | the number of the change that started the operation and the frame it was processed in. `null` and `0` until then |
-| `DragStartedOrder`, `DragStartedFrameCount`, `Dragged` | the change that moved the pointer beyond the drag threshold, which is when begin-drag is delivered |
-| `CompletedOrder`, `CompletedFrameCount`, `Completed`, `EndReason` | the change that ended the operation, and why: `Finished`, `Interrupted` (`Stop`, or the Input System reset the device), `TimedOut`, `Dropped` (the Input System discarded the event that would have started it), `Refused`. `CompletedOrder` is `null` when no processed change ended the operation: `Dropped`, ended by `Stop`, or an operation whose end changes no control, such as a hover that presses nothing. |
+| `DragStartedOrder`, `DragStartedFrameCount`, `Dragged` | the change that moved the pointer beyond the drag threshold, which is when begin-drag is delivered, and whether that happened: `Dragged` |
+| `CompletedOrder`, `CompletedFrameCount`, `Completed`, `EndReason` | the change that ended the operation, and why: `Finished`, `Interrupted` (`Stop`, the Input System reset the device, or it discarded an event of the operation after it had started, such as the release), `TimedOut`, `Dropped` (the Input System discarded the event that would have started it), `Refused`. `CompletedOrder` is `null` when no processed change ended the operation: `Dropped`, ended by `Stop`, or an operation whose end changes no control, such as a hover that presses nothing. |
 | `Target`, `ClickExecuted`, `ClickTarget`, `DragTarget`, `DropTarget` | what the event system is going to do, worked out from the rules of the input module (below) |
 | `Gesture`, `Sequence` | the plan |
 
@@ -363,6 +392,14 @@ They follow the rules of the input module (the nearest handler of the object tha
 is on the object that got the press, the drag threshold), and are worked out right after the input update that processed
 the change, before the event system delivers. A handler that changes the UI while it runs can make them differ from
 what was delivered. A pointer operation follows the first button that its gesture presses, if the UI handles that button.
+
+`DragTarget` is the object that would get `beginDrag`, `drag` and `endDrag` if the pointer is dragged. The input module
+decides it when the pointer is pressed (that object receives `initializePotentialDrag` then), so `DragTarget` has a value
+as soon as the press was processed, and it is worked out once already when `Fire` returns. It does not tell that
+anything was dragged: a tap on a button that has a drag handler has that button as its `DragTarget` too. Whether the
+pointer dragged is `Dragged`, which is `true` once the pointer moved beyond the drag threshold, and `DragStartedOrder` is
+the change that did it. `DropTarget` is the other way round: no drop is delivered for a pointer that did not drag, so it
+stays `null` unless `Dragged` is `true`.
 
 ### `GetLatestLogs()`
 
@@ -475,16 +512,18 @@ right and middle buttons of a mouse have a prediction; for any other button it i
 
 The virtual input changes the Input System for as long as an auto tap, or any other session, is alive:
 
-- **The settings are replaced.** The Input System settings that decide whether input reaches the game are replaced by a
-  copy with `backgroundBehavior` set to `IgnoreFocus` and `editorInputBehaviorInPlayMode` set to
-  `AllDeviceInputAlwaysGoesToGameView`, and put back when the last session is disposed. This is done on every platform,
-  and without it the Input System resets devices or drops input while the application or the Game view has no focus, which
-  includes an Editor that runs in the background. In the Editor, **keys typed in other windows of the Editor also reach the
-  game while it runs.**
-- **The pointer behavior is replaced.** The `pointerBehavior` of the `InputSystemUIInputModule` is set to
-  `AllPointersAsIs`, on every platform, and restored afterwards. In the module's default behavior a mouse and a pen are one
-  pointer, and input from a touchscreen removes that pointer, so a finger and a mouse or a pen that are used at the same
-  time disturb each other.
+- **In the Editor, the settings are replaced.** The Input System settings that decide whether input reaches the game are
+  replaced by a copy with `backgroundBehavior` set to `IgnoreFocus` and `editorInputBehaviorInPlayMode` set to
+  `AllDeviceInputAlwaysGoesToGameView`, and put back when the last session is disposed. Without it the Input System
+  resets devices or drops input while the Game view has no focus, which includes an Editor that runs in the background.
+  **Keys typed in other windows of the Editor also reach the game while it runs.** This is done in the Editor only: a
+  player keeps the settings of the project.
+- **The pointer behavior is replaced, on every platform.** The `pointerBehavior` of the `InputSystemUIInputModule` is set
+  to `AllPointersAsIs`, and restored afterwards. In the module's default behavior (`SingleMouseOrPenButMultiTouchAndTrack`)
+  a finger and a mouse that are used at the same time disturb each other: the pointer that changes first in a frame decides
+  what survives. When the mouse changes while a finger is down, the pointer of the finger is removed (the UI under it gets
+  `pointerExit`), the press goes on as a press of the mouse's pointer (the drag, and the `pointerUp` of the release, carry
+  the pointer id of the mouse), and the pointer id of the finger never gets its `pointerUp`.
 - **`.current` changes.** Virtual devices are real devices of the Input System. `Touchscreen.current`, `Keyboard.current`,
   `Mouse.current`, `Pointer.current`, `Gamepad.all`, `InputSystem.onDeviceChange` and the control scheme that a
   `PlayerInput` chose can change as soon as a virtual device is added or receives input, and change back when it is
@@ -555,5 +594,5 @@ some things that were true in v1 are not true any more.
 
 **At run time**
 - `.current`, `.all`, `onDeviceChange` and the control scheme of a `PlayerInput` can change while an auto tap runs.
-- The Input System settings and the pointer behavior of the module are replaced. See
+- In the Editor the Input System settings are replaced, and on every platform the pointer behavior of the module. See
   [What happens while it runs](#what-happens-while-it-runs).

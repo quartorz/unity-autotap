@@ -144,8 +144,8 @@ namespace UnityAutoTap
 	}
 
 	/// <summary>
-	/// A button-like control (a key, a mouse button, a pen tip or <c>inRange</c>, a gamepad button or trigger) went
-	/// from released to pressed.
+	/// A button-like control (a key, a mouse button, a pen tip, a gamepad button or trigger) went from released to
+	/// pressed. A synthetic control, such as the <c>inRange</c> of a pen, is never reported.
 	/// </summary>
 	public sealed class ButtonDown : ControlChange
 	{

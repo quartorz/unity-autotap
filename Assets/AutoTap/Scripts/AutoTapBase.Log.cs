@@ -50,8 +50,9 @@ namespace UnityAutoTap
 			Finished,
 
 			/// <summary>
-			/// <see cref="Stop"/> ended the operation, or the Input System reset the device while the operation was
-			/// running.
+			/// <see cref="Stop"/> ended the operation, the Input System reset the device while the operation was
+			/// running, or the Input System discarded an event that the operation queued after it had started (a
+			/// release, for example).
 			/// </summary>
 			Interrupted,
 
@@ -270,7 +271,9 @@ namespace UnityAutoTap
 
 			/// <summary>
 			/// The sequence number of the change that ended the operation, which is the release. <c>null</c> if the
-			/// operation ended without such a change (<see cref="EndReason.Dropped"/>, or ended by <see cref="Stop"/>).
+			/// operation ended without such a change: <see cref="EndReason.Dropped"/>, ended by <see cref="Stop"/>, or
+			/// an operation whose end changed no control (a hover that presses nothing, a <c>Set</c> of the value that
+			/// a control already has).
 			/// </summary>
 			/// <remarks>
 			/// When <see cref="Dragged"/> is <c>true</c>, this is the end of the drag (end-drag and drop) as well,
