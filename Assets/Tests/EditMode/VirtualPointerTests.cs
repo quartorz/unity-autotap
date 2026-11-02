@@ -238,6 +238,24 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
+		public void TheInRangeOfAPenIsWrittenAlthoughTheReaderDoesNotReportItBecauseItIsSynthetic()
+		{
+			var pen = _session.GetPointer("Pen");
+
+			pen.Set("inRange", 1f);
+			InputSystem.Update();
+
+			Assert.That(Pen.current.inRange.isPressed, Is.True);
+			Assert.That(_changes, Is.Empty);
+
+			pen.ResetToDefault();
+			InputSystem.Update();
+
+			Assert.That(Pen.current.inRange.isPressed, Is.False);
+			Assert.That(_changes, Is.Empty);
+		}
+
+		[Test]
 		public void TheButtonThatNullStandsForIsTheOneWithTheUsagePrimaryAction()
 		{
 			var mouse = _session.GetPointer("Mouse");

@@ -183,6 +183,9 @@ namespace UnityAutoTap.Tests
 			Assert.That(device.stick.ReadUnprocessedValue().x, Is.EqualTo(0.5f).Within(0.01f));
 			Assert.That(device.stick.ReadUnprocessedValue().y, Is.EqualTo(0.25f).Within(0.01f));
 			Assert.That(device.trigger.isPressed, Is.True);
+			Assert.That(
+				_changes.OfType<ValueChanged>().Select(c => c.ControlPath), Is.EqualTo(new[] { "stick" }),
+				"the reader reports a stick as one change, not as stick/x and stick/y");
 		}
 
 		[Test]
