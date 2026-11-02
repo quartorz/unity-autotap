@@ -182,7 +182,28 @@ namespace UnityAutoTap.Tests
 			Assert.That(item.DragStartedOrder, Is.Null);
 			Assert.That(item.ClickExecuted, Is.True);
 			Assert.That(item.ClickTarget, Is.SameAs(handler.gameObject));
-			Assert.That(item.DragTarget, Is.SameAs(handler.gameObject), "the drag target is known from the press");
+			Assert.That(item.DragTarget, Is.SameAs(handler.gameObject), "the drag target is known from the press, whether or not the pointer dragged");
+			Assert.That(item.DropTarget, Is.Null);
+		}
+
+		[Test]
+		public void ADropIsNotPredictedForAPointerThatDidNotDragEvenIfItIsReleasedOverAnObjectThatAcceptsDrops()
+		{
+			var source = _scene.Add<DragHandler>("Source", 0.1f, 0.1f, 0.3f, 0.3f);
+			var drop = _scene.Add<DropHandler>("Drop", 0.3f, 0.1f, 0.5f, 0.3f);
+			var edge = TestScene.At(0.3f, 0.2f);
+
+			var shortMove = _autoTap.Drag(0, edge - new Vector2(3, 0), edge + new Vector2(3, 0), 0.1f);
+			RunUntilCompleted(shortMove);
+			var longMove = _autoTap.Drag(0, TestScene.At(0.2f, 0.2f), TestScene.At(0.4f, 0.2f), 0.1f);
+			RunUntilCompleted(longMove);
+
+			Assert.That(shortMove.Dragged, Is.False);
+			Assert.That(shortMove.DragTarget, Is.SameAs(source.gameObject));
+			Assert.That(shortMove.DropTarget, Is.Null, "the input module delivers no drop for a pointer that did not drag");
+			Assert.That(longMove.Dragged, Is.True);
+			Assert.That(longMove.DragTarget, Is.SameAs(source.gameObject));
+			Assert.That(longMove.DropTarget, Is.SameAs(drop.gameObject), "while it does for one that did");
 		}
 
 		[Test]

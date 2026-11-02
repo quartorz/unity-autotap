@@ -378,12 +378,12 @@ namespace UnityAutoTap.Tests
 		}
 
 		[UnityTest]
-		public IEnumerator Prediction_Tap_DragTarget_IsHeldUntilItIsDecidedWhetherItIsSetByThePress()
+		public IEnumerator Prediction_Tap_DragTarget_IsWhatThePressFoundForADrag_AlsoWhenTheOperationDidNotDrag()
 		{
-			// Not decided. The XML doc of LogItem.DragTarget says "null if the operation does not drag", but the
-			// implementation fills it when the press is processed (what the input module would send begin-drag to if
-			// the pointer moved beyond the threshold; initializePotentialDrag already goes there), and the EditMode
-			// test AMoveUnderTheThresholdIsNotADrag asserts that ("the drag target is known from the press").
+			// DragTarget is the object that would receive begin-drag, drag and end-drag if the pointer is dragged. The
+			// input module decides it when the pointer is pressed (that object receives initializePotentialDrag then), so
+			// it is set for a tap as well; Dragged tells whether the pointer was dragged, and DropTarget stays empty
+			// because no drop is delivered for a pointer that did not drag.
 			yield return BuildRig();
 			var button = Rig.AddButton("Button", Rig.Cell(1, 1));
 			yield return Settle();
@@ -393,9 +393,14 @@ namespace UnityAutoTap.Tests
 			yield return Step(() => item = Auto.FireTap(0, Rig.Center(button.gameObject), 0f));
 			yield return Until(() => item.Completed, "the tap to end");
 
-			Assert.Ignore("Undecided: should DragTarget be null for an operation that did not drag (the XML doc), or the "
-				+ "object that the press found for a possible drag (the implementation)? Observed: DragTarget = "
-				+ (item.DragTarget != null ? item.DragTarget.name : "null") + ", Dragged = " + item.Dragged + ".");
+			var initialize = Rig.Log.First("initializePotentialDrag");
+			Assert.That(initialize, Is.Not.Null, Rig.Log.ToString());
+			Assert.That(item.DragTarget, Is.SameAs(initialize.Target), "the object that received initializePotentialDrag");
+			Assert.That(item.DragTarget, Is.SameAs(button.gameObject));
+			Assert.That(item.Dragged, Is.False);
+			Assert.That(item.DragStartedOrder, Is.Null);
+			Assert.That(Rig.Log.CountOf("beginDrag"), Is.Zero, Rig.Log.ToString());
+			Assert.That(item.DropTarget, Is.Null);
 		}
 
 		[UnityTest]

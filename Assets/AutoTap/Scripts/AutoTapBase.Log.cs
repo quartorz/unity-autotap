@@ -238,14 +238,23 @@ namespace UnityAutoTap
 			public int DragStartedFrameCount;
 
 			/// <summary>
-			/// The object that receives begin-drag, drag and end-drag (<see cref="PointerPrediction.PointerDrag"/>).
-			/// <c>null</c> if the operation does not drag.
+			/// The object that receives begin-drag, drag and end-drag if the pointer is dragged
+			/// (<see cref="PointerPrediction.PointerDrag"/>). <c>null</c> if no object under the press handles drags.
 			/// </summary>
+			/// <remarks>
+			/// <para>
+			/// It is a prospect, not a record of a drag: the input module decides it when the pointer is pressed (it
+			/// is the object that receives <c>initializePotentialDrag</c> then), so it is worked out for the press
+			/// when <c>Fire</c> is called, again when the press is processed, and it stays for an operation that did
+			/// not drag. <see cref="Dragged"/> tells whether the pointer was dragged.
+			/// </para>
+			/// </remarks>
 			public GameObject DragTarget;
 
 			/// <summary>
 			/// The object that receives the drop (<see cref="PointerPrediction.DropTarget"/>) where the pointer was
-			/// released. <c>null</c> if the operation did not drag, or nothing accepts the drop.
+			/// released. <c>null</c> if the operation did not drag, because no drop is delivered then, or if nothing
+			/// accepts the drop.
 			/// </summary>
 			public GameObject DropTarget;
 

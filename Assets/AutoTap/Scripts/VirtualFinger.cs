@@ -401,7 +401,9 @@ namespace UnityAutoTap
 		public GameObject PointerClick { get; internal set; }
 
 		/// <summary>
-		/// The object that receives begin-drag, drag and end-drag. <c>null</c> if there is none.
+		/// The object that receives begin-drag, drag and end-drag if the pointer is dragged. <c>null</c> if there is
+		/// none. The input module decides it when the pointer is pressed, so it is set whether or not the pointer is
+		/// dragged later; <see cref="Dragging"/> tells whether it was.
 		/// </summary>
 		public GameObject PointerDrag { get; internal set; }
 
