@@ -5,6 +5,7 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.UI;
 
 namespace UnityAutoTap.Tests
 {
@@ -42,6 +43,26 @@ namespace UnityAutoTap.Tests
 		public LogItem Do(int index, Gesture gesture)
 		{
 			return Fire(index, gesture);
+		}
+
+		public LogItem Pointer(string layout, Gesture gesture, int number = 0)
+		{
+			return FirePointer(layout, gesture, number);
+		}
+
+		public LogItem Mouse(Gesture gesture, int number = 0)
+		{
+			return FireMouse(gesture, number);
+		}
+
+		public LogItem Pen(Gesture gesture, int number = 0)
+		{
+			return FirePen(gesture, number);
+		}
+
+		public LogItem Scroll(Vector2 position, Vector2 delta)
+		{
+			return FireScroll(position, delta);
 		}
 
 		protected override void OnTapCompleted(int index, LogItem logItem)
@@ -144,6 +165,58 @@ namespace UnityAutoTap.Tests
 	}
 
 	/// <summary>
+	/// One event that the UI delivered to a <see cref="Recorder"/>.
+	/// </summary>
+	sealed class UiEvent
+	{
+		public string Name;
+		public string Kind;
+		public PointerEventData.InputButton Button;
+		public int PointerId;
+		public Vector2 Position;
+		public Vector2 ScrollDelta;
+
+		public override string ToString()
+		{
+			return $"{Name}.{Kind}";
+		}
+	}
+
+	/// <summary>
+	/// A game object that handles every pointer event and writes what it receives into a shared list.
+	/// </summary>
+	sealed class Recorder : MonoBehaviour,
+		IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler,
+		IBeginDragHandler, IDragHandler, IEndDragHandler, IDropHandler, IScrollHandler
+	{
+		public List<UiEvent> Events;
+
+		void Record(string kind, PointerEventData eventData)
+		{
+			Events?.Add(new UiEvent
+			{
+				Name = name,
+				Kind = kind,
+				Button = eventData.button,
+				PointerId = eventData.pointerId,
+				Position = eventData.position,
+				ScrollDelta = eventData.scrollDelta,
+			});
+		}
+
+		public void OnPointerEnter(PointerEventData eventData) => Record("enter", eventData);
+		public void OnPointerExit(PointerEventData eventData) => Record("exit", eventData);
+		public void OnPointerDown(PointerEventData eventData) => Record("down", eventData);
+		public void OnPointerUp(PointerEventData eventData) => Record("up", eventData);
+		public void OnPointerClick(PointerEventData eventData) => Record("click", eventData);
+		public void OnBeginDrag(PointerEventData eventData) => Record("beginDrag", eventData);
+		public void OnDrag(PointerEventData eventData) => Record("drag", eventData);
+		public void OnEndDrag(PointerEventData eventData) => Record("endDrag", eventData);
+		public void OnDrop(PointerEventData eventData) => Record("drop", eventData);
+		public void OnScroll(PointerEventData eventData) => Record("scroll", eventData);
+	}
+
+	/// <summary>
 	/// An event system with a raycaster that hits rectangles of the screen, laid out in fractions of the screen so
 	/// that it works at any screen size. Nothing is rendered, which edit mode does not do for a canvas.
 	/// </summary>
@@ -189,11 +262,19 @@ namespace UnityAutoTap.Tests
 		readonly RectRaycaster _raycaster;
 		int _depth;
 
-		public TestScene()
+		/// <param name="withInputModule">
+		/// Adds <see cref="InputSystemUIInputModule"/> and runs it, so that the UI receives what the virtual devices
+		/// do. <see cref="ProcessUi"/> is what the event system does once per frame.
+		/// </param>
+		public TestScene(bool withInputModule = false)
 		{
 			var eventSystemObject = new GameObject("EventSystem", typeof(EventSystem));
 			_roots.Add(eventSystemObject);
 			EventSystem = eventSystemObject.GetComponent<EventSystem>();
+			if (withInputModule)
+			{
+				InputModule = eventSystemObject.AddComponent<InputSystemUIInputModule>();
+			}
 			var raycasterObject = new GameObject("Raycaster", typeof(RectRaycaster));
 			_roots.Add(raycasterObject);
 			_raycaster = raycasterObject.GetComponent<RectRaycaster>();
@@ -206,9 +287,30 @@ namespace UnityAutoTap.Tests
 			// The event system and the raycaster do not run in edit mode, where they would register themselves.
 			Invoke(EventSystem, "OnEnable");
 			Invoke(_raycaster, "OnEnable");
+			if (InputModule != null)
+			{
+				Invoke(InputModule, "Awake");
+				Invoke(InputModule, "OnEnable");
+
+				// The first update chooses the module; the ones after it process it.
+				ProcessUi();
+			}
 		}
 
 		public EventSystem EventSystem { get; }
+
+		/// <summary>
+		/// The input module of the event system, or <c>null</c>.
+		/// </summary>
+		public InputSystemUIInputModule InputModule { get; }
+
+		/// <summary>
+		/// Does what the event system does once per frame: lets the input module deliver what it received.
+		/// </summary>
+		public void ProcessUi()
+		{
+			Invoke(EventSystem, "Update");
+		}
 
 		/// <summary>
 		/// A canvas for the markers. Nothing on it is hit.
@@ -258,6 +360,11 @@ namespace UnityAutoTap.Tests
 
 		public void Dispose()
 		{
+			if (InputModule != null)
+			{
+				Invoke(InputModule, "OnDisable");
+			}
+
 			if (EventSystem != null)
 			{
 				Invoke(EventSystem, "OnDisable");

@@ -89,7 +89,9 @@ namespace UnityAutoTap
 		/// <param name="layout">The layout of a device derived from <see cref="Pointer"/>, for example <c>Mouse</c> or <c>Pen</c>.</param>
 		/// <param name="number">Tells apart several devices of the same layout.</param>
 		/// <returns>The same instance for the same (layout, number) pair.</returns>
-		/// <exception cref="ArgumentException">The layout is a touchscreen, or is not derived from <see cref="Pointer"/>.</exception>
+		/// <exception cref="ArgumentException">
+		/// There is no such layout, or it is a touchscreen, or it is not derived from <see cref="Pointer"/>.
+		/// </exception>
 		VirtualPointer GetPointer(string layout, int number = 0);
 
 		/// <summary>
@@ -137,7 +139,7 @@ namespace UnityAutoTap
 		public VirtualPointer GetPointer(string layout, int number = 0)
 		{
 			ThrowIfDisposed();
-			throw new NotImplementedException();
+			return _core.GetPointer(layout, number);
 		}
 
 		/// <inheritdoc/>

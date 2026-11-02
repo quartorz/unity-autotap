@@ -109,6 +109,7 @@ namespace UnityAutoTap
 		bool _disposed;
 		Action<InputChange> _changed;
 		Action _updateEnded;
+		Action<InputDevice> _eventProcessed;
 
 		/// <summary>
 		/// Starts reading.
@@ -156,6 +157,17 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
+		/// Raised for every event that the Input System processed for a watched device, whether or not it changed
+		/// anything that is reported: a state event that wrote the state it already had, a character, a composition.
+		/// It is raised before the changes of the event. It is not raised for the reset of a device.
+		/// </summary>
+		internal event Action<InputDevice> EventProcessed
+		{
+			add => _eventProcessed += value;
+			remove => _eventProcessed -= value;
+		}
+
+		/// <summary>
 		/// Stops reading. No event is raised afterwards.
 		/// </summary>
 		public void Dispose()
@@ -173,6 +185,7 @@ namespace UnityAutoTap
 			_trackers.Clear();
 			_changed = null;
 			_updateEnded = null;
+			_eventProcessed = null;
 		}
 
 		bool IsWatched(InputDevice device)
@@ -363,6 +376,8 @@ namespace UnityAutoTap
 				return;
 			}
 
+			_eventProcessed?.Invoke(device);
+
 			InputChange change;
 			if (isText)
 			{
@@ -430,6 +445,11 @@ namespace UnityAutoTap
 				if (!isReset && !device.enabled)
 				{
 					return;
+				}
+
+				if (!isReset)
+				{
+					_eventProcessed?.Invoke(device);
 				}
 
 				_pending.Clear();
@@ -706,7 +726,10 @@ namespace UnityAutoTap
 			return any;
 		}
 
-		static string RelativePath(InputDevice device, InputControl control)
+		/// <summary>
+		/// The path of a control relative to its device, in the form that <see cref="ControlChange.ControlPath"/> has.
+		/// </summary>
+		internal static string RelativePath(InputDevice device, InputControl control)
 		{
 			var devicePath = device.path;
 			var path = control.path;

@@ -98,6 +98,19 @@ namespace UnityAutoTap
 		/// Operates a pointer device other than a touchscreen as planned by <paramref name="gesture"/>: hover, the
 		/// buttons of a mouse, a pen with pressure and tilt, scroll.
 		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// The device is added to the Input System by the first call that names it, even if the call returns
+		/// <c>null</c> for another reason. Its position stays where the gesture left it, so the UI under it stays
+		/// hovered; the buttons and the other controls that are not marked <c>dontReset</c> go back to their
+		/// defaults when the gesture ends.
+		/// </para>
+		/// <para>
+		/// The <see cref="LogItem"/> follows the first button that the gesture presses if the UI handles that button
+		/// (the primary button, and the right and middle buttons of a mouse); for other buttons and for gestures that
+		/// press nothing, the fields about targets stay empty.
+		/// </para>
+		/// </remarks>
 		/// <param name="layout">The layout of the device, derived from <see cref="Pointer"/>.</param>
 		/// <param name="gesture">The plan.</param>
 		/// <param name="number">Tells apart several devices of the same layout.</param>
@@ -108,7 +121,84 @@ namespace UnityAutoTap
 		/// </exception>
 		protected internal LogItem FirePointer(string layout, Gesture gesture, int number = 0)
 		{
-			throw new NotImplementedException();
+			if (_slots == null)
+			{
+				throw new InvalidOperationException("Setup has to be called before Fire.");
+			}
+
+			if (gesture == null)
+			{
+				throw new ArgumentNullException(nameof(gesture));
+			}
+
+			if (string.IsNullOrEmpty(layout))
+			{
+				throw new ArgumentException("The layout is empty.", nameof(layout));
+			}
+
+			var plan = gesture.PlanForPointer();
+			if (!Enabled)
+			{
+				return null;
+			}
+
+			var pointer = _input.GetPointer(layout, number);
+			pointer.ValidateGesture(gesture);
+			if (_deviceOperations.ContainsKey(pointer.Device))
+			{
+				return null;
+			}
+
+			foreach (var point in plan.Points)
+			{
+				if (IsOutsideScreen(point))
+				{
+					return null;
+				}
+			}
+
+			GameObject target = null;
+			GameObject dragTarget = null;
+			if (plan.StartsWithPress)
+			{
+				var probe = PointerPredictor.Probe(plan.Start);
+				if (probe.Topmost.gameObject != null && ShouldNotPressOn(probe.Topmost))
+				{
+					return null;
+				}
+
+				// Only the buttons that the UI handles are predicted.
+				if (pointer.TrackOf(pointer.ResolveButton(plan.FirstButton)) != null)
+				{
+					target = probe.Press;
+					dragTarget = probe.Drag;
+				}
+			}
+
+			var item = NewLogItem(-1) ?? new LogItem();
+			FillItem(
+				item, -1, LogItemKind.Pointer, pointer.Device, plan.Start, plan.LastMove, float.NaN, target, dragTarget,
+				gesture, null);
+
+			var operation = new PointerOperation(item, ++_fireSequence, pointer, gesture, plan.StepCount);
+			operation.Refuses = position =>
+			{
+				var topmost = PointerPredictor.Probe(position).Topmost;
+				return topmost.gameObject != null && ShouldNotPressOn(topmost);
+			};
+			operation.Runner.MoveStarted = destination =>
+			{
+				if (destination != item.ScreenPoint)
+				{
+					item.DragTo = destination;
+				}
+			};
+
+			operation.QueueFirstStep(plan);
+			ShowPointerMarker(pointer, plan.Start);
+			_operations.Add(operation);
+			_deviceOperations.Add(pointer.Device, operation);
+			return item;
 		}
 
 		/// <summary>
@@ -206,6 +296,45 @@ namespace UnityAutoTap
 			return FireDevice("Keyboard", sequence);
 		}
 
+		static bool IsOutsideScreen(Vector2 point)
+		{
+			return point.x < 0 || point.x > Screen.width || point.y < 0 || point.y > Screen.height;
+		}
+
+		/// <summary>
+		/// Sets every field of a new <see cref="LogItem"/>, so that nothing of what the override of
+		/// <see cref="NewLogItem"/> did is left except its type and its own fields.
+		/// </summary>
+		void FillItem(
+			LogItem item, int index, LogItemKind kind, InputDevice device, Vector2 start, Vector2? dragTo, float duration,
+			GameObject target, GameObject dragTarget, Gesture gesture, ControlSequence sequence)
+		{
+			item.Index = index;
+			item.Kind = kind;
+			item.Device = device;
+			item.DateTime = DateTime.Now;
+			item.Target = target;
+			item.ScreenPoint = start;
+			item.DragTo = dragTo.HasValue && dragTo.Value != start ? dragTo : null;
+			item.FrameCount = Time.frameCount;
+			item.Duration = duration;
+			item.Order = null;
+			item.StartedFrameCount = 0;
+			item.Dragged = false;
+			item.DragStartedOrder = null;
+			item.DragStartedFrameCount = 0;
+			item.DragTarget = dragTarget;
+			item.DropTarget = null;
+			item.Completed = false;
+			item.EndReason = EndReason.Finished;
+			item.CompletedOrder = null;
+			item.CompletedFrameCount = 0;
+			item.ClickExecuted = false;
+			item.ClickTarget = null;
+			item.Gesture = gesture;
+			item.Sequence = sequence;
+		}
+
 		LogItem FireFinger(int index, Gesture gesture, LogItemKind kind, float duration)
 		{
 			if (_slots == null)
@@ -226,7 +355,7 @@ namespace UnityAutoTap
 
 			foreach (var point in plan.Points)
 			{
-				if (point.x < 0 || point.x > Screen.width || point.y < 0 || point.y > Screen.height)
+				if (IsOutsideScreen(point))
 				{
 					return null;
 				}
@@ -255,30 +384,10 @@ namespace UnityAutoTap
 				throw;
 			}
 
-			item.Index = index;
-			item.Kind = kind;
-			item.Device = finger.Device;
-			item.DateTime = DateTime.Now;
-			item.Target = probe.Press;
-			item.ScreenPoint = plan.Start;
-			item.DragTo = plan.LastMove.HasValue && plan.LastMove.Value != plan.Start ? plan.LastMove : null;
-			item.FrameCount = Time.frameCount;
-			item.Duration = duration;
-			item.Order = null;
-			item.StartedFrameCount = 0;
-			item.Dragged = false;
-			item.DragStartedOrder = null;
-			item.DragStartedFrameCount = 0;
-			item.DragTarget = probe.Drag;
-			item.DropTarget = null;
-			item.Completed = false;
-			item.EndReason = EndReason.Finished;
-			item.CompletedOrder = null;
-			item.CompletedFrameCount = 0;
-			item.ClickExecuted = false;
-			item.ClickTarget = null;
-			item.Gesture = kind == LogItemKind.Gesture ? gesture : null;
-			item.Sequence = null;
+			FillItem(
+				item, index, kind, finger.Device, plan.Start,
+				plan.LastMove.HasValue && plan.LastMove.Value != plan.Start ? plan.LastMove : null, duration, probe.Press,
+				probe.Drag, kind == LogItemKind.Gesture ? gesture : null, null);
 
 			var operation = new FingerOperation(index, item, ++_fireSequence, finger, gesture, plan.StepCount);
 			operation.Runner.MoveStarted = destination =>

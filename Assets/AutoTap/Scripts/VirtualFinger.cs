@@ -363,14 +363,15 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// <c>true</c> once the press was evaluated.
+		/// How many presses were evaluated. A finger is pressed once; a button of a pointer is pressed again and
+		/// again, so an operation compares this with the value at the time it started to use the button.
 		/// </summary>
-		internal bool PressEvaluated { get; set; }
+		internal int PressCount { get; set; }
 
 		/// <summary>
-		/// <c>true</c> once the release was evaluated.
+		/// How many releases were evaluated.
 		/// </summary>
-		internal bool ReleaseEvaluated { get; set; }
+		internal int ReleaseCount { get; set; }
 
 		/// <summary>
 		/// The <see cref="InputChange.Order"/> of the change at which <see cref="Dragging"/> became <c>true</c>.

@@ -24,6 +24,12 @@ namespace UnityAutoTap
 	/// finger.
 	/// </para>
 	/// <para>
+	/// The first step is carried out by <c>Fire</c> and the others in the following frames, once the first step was
+	/// processed. A button is never pressed and released by the same input update: a release that follows a press with
+	/// no time in between is made in the next frame. A pen is in range from the first step until the end of the
+	/// gesture.
+	/// </para>
+	/// <para>
 	/// A gesture must not be modified after it was passed to a <c>Fire</c> method.
 	/// </para>
 	/// </remarks>
@@ -275,6 +281,36 @@ namespace UnityAutoTap
 
 			return new FingerPlan(Steps[0].Position, points, lastMove, count);
 		}
+
+		/// <summary>
+		/// Checks that the gesture can be carried out by a pointer device, as far as that can be told without the
+		/// device, and summarizes it.
+		/// </summary>
+		/// <exception cref="ArgumentException">The gesture does not fit a pointer.</exception>
+		internal PointerPlan PlanForPointer()
+		{
+			if (Steps.Count == 0
+				|| !Steps[0].HasPosition
+				|| (Steps[0].Kind != StepKind.Press && Steps[0].Kind != StepKind.Hover))
+			{
+				throw new ArgumentException("A gesture for a pointer has to start with PressAt or HoverAt.", nameof(Steps));
+			}
+
+			var points = new List<Vector2> { Steps[0].Position };
+			Vector2? lastMove = null;
+			for (var i = 1; i < Steps.Count; ++i)
+			{
+				var step = Steps[i];
+				if (step.Kind == StepKind.Move && step.PositionFunc == null)
+				{
+					points.Add(step.Position);
+					lastMove = step.Position;
+				}
+			}
+
+			return new PointerPlan(
+				Steps[0].Position, Steps[0].Kind == StepKind.Press, Steps[0].Button, points, lastMove, Steps.Count);
+		}
 	}
 
 	/// <summary>
@@ -308,6 +344,54 @@ namespace UnityAutoTap
 		/// <summary>
 		/// The number of steps to run: all steps except a release at the very end, which the end of the gesture does
 		/// anyway.
+		/// </summary>
+		public int StepCount { get; }
+	}
+
+	/// <summary>
+	/// What <see cref="Gesture.PlanForPointer"/> found out about a gesture.
+	/// </summary>
+	internal sealed class PointerPlan
+	{
+		public PointerPlan(
+			Vector2 start, bool startsWithPress, string firstButton, List<Vector2> points, Vector2? lastMove,
+			int stepCount)
+		{
+			Start = start;
+			StartsWithPress = startsWithPress;
+			FirstButton = firstButton;
+			Points = points;
+			LastMove = lastMove;
+			StepCount = stepCount;
+		}
+
+		/// <summary>
+		/// The position of the first step.
+		/// </summary>
+		public Vector2 Start { get; }
+
+		/// <summary>
+		/// <c>true</c> if the first step presses a button, <c>false</c> if it only hovers.
+		/// </summary>
+		public bool StartsWithPress { get; }
+
+		/// <summary>
+		/// The button that the first step presses, as given to the gesture. <c>null</c> for the primary button.
+		/// </summary>
+		public string FirstButton { get; }
+
+		/// <summary>
+		/// The position of the first step and every destination that is known before the gesture runs.
+		/// </summary>
+		public List<Vector2> Points { get; }
+
+		/// <summary>
+		/// The destination of the last move whose destination is known before the gesture runs.
+		/// </summary>
+		public Vector2? LastMove { get; }
+
+		/// <summary>
+		/// The number of steps to run, which is every step.
 		/// </summary>
 		public int StepCount { get; }
 	}

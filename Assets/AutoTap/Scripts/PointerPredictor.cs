@@ -78,6 +78,23 @@ namespace UnityAutoTap
 		public PointerPrediction Prediction { get; } = new PointerPrediction();
 
 		/// <summary>
+		/// <c>true</c> from the press until the release.
+		/// </summary>
+		public bool Active => _active;
+
+		/// <summary>
+		/// Tells where the pointer is at the end of an input update in which it neither pressed nor released and was
+		/// not held. The input module compares the position of a frame with the position of the frame before, so
+		/// every update that moved the pointer has to be noted.
+		/// </summary>
+		/// <param name="position">The position at the end of the update.</param>
+		public void NotePosition(Vector2 position)
+		{
+			_previousPosition = position;
+			_hasPrevious = true;
+		}
+
+		/// <summary>
 		/// Finds what is under <paramref name="position"/> in the same way as the input module does.
 		/// </summary>
 		public static PressProbe Probe(Vector2 position)
@@ -176,8 +193,7 @@ namespace UnityAutoTap
 				prediction.DropTarget = null;
 				prediction.DragStartedOrder = null;
 				prediction.DragStartedFrame = 0;
-				prediction.PressEvaluated = true;
-				prediction.ReleaseEvaluated = false;
+				++prediction.PressCount;
 			}
 
 			if (released && _active)
@@ -189,7 +205,7 @@ namespace UnityAutoTap
 				prediction.DropTarget = !isClick && _dragging && _pointerDrag != null
 					? ExecuteEvents.GetEventHandler<IDropHandler>(over)
 					: null;
-				prediction.ReleaseEvaluated = true;
+				++prediction.ReleaseCount;
 
 				_active = false;
 				_eligibleForClick = false;

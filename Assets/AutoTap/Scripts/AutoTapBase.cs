@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace UnityAutoTap
@@ -101,9 +102,14 @@ namespace UnityAutoTap
 		FingerOperation[] _slots;
 		Image[] _markers;
 		Canvas _canvas;
-		readonly List<FingerOperation> _operations = new List<FingerOperation>();
+		Sprite _markerSprite;
+		readonly Dictionary<VirtualPointer, Image> _pointerMarkers = new Dictionary<VirtualPointer, Image>();
+		readonly List<Operation> _operations = new List<Operation>();
 		readonly Dictionary<int, FingerOperation> _fingerOperations = new Dictionary<int, FingerOperation>();
-		readonly List<FingerOperation> _scratch = new List<FingerOperation>();
+		readonly Dictionary<InputDevice, DeviceBoundOperation> _deviceOperations =
+			new Dictionary<InputDevice, DeviceBoundOperation>();
+		readonly List<Operation> _scratch = new List<Operation>();
+		readonly List<DeviceBoundOperation> _boundScratch = new List<DeviceBoundOperation>();
 		readonly List<LogEvent> _log = new List<LogEvent>();
 		readonly List<KeyValuePair<long, LogItem>> _tail = new List<KeyValuePair<long, LogItem>>();
 		bool _logIsStale;
@@ -153,6 +159,7 @@ namespace UnityAutoTap
 			DestroyMarkers();
 			Enabled = false;
 			_canvas = canvasForMarker;
+			_markerSprite = markerSprite;
 			_slots = new FingerOperation[tapCount];
 			_markers = new Image[tapCount];
 			if (canvasForMarker == null)
@@ -204,6 +211,7 @@ namespace UnityAutoTap
 			_slots = null;
 			_operations.Clear();
 			_fingerOperations.Clear();
+			_deviceOperations.Clear();
 			_tail.Clear();
 			_log.Clear();
 		}
@@ -284,17 +292,26 @@ namespace UnityAutoTap
 			var frame = Time.frameCount;
 			foreach (var operation in _scratch)
 			{
+				if (operation.Ended)
+				{
+					continue;
+				}
+
 				operation.Interrupt();
 				Complete(operation, EndReason.Interrupted, null, frame);
 				_tail.Add(new KeyValuePair<long, LogItem>(operation.FireSequence, operation.Item));
-				_slots[operation.Index] = null;
-				operation.Notified = true;
-				OnTapCompleted(operation.Index, operation.Item);
+				if (operation.Index >= 0)
+				{
+					_slots[operation.Index] = null;
+					operation.Notified = true;
+					OnTapCompleted(operation.Index, operation.Item);
+				}
 			}
 
 			_scratch.Clear();
 			_operations.Clear();
 			_fingerOperations.Clear();
+			_deviceOperations.Clear();
 			HideMarkers();
 			OnStop();
 
@@ -442,6 +459,12 @@ namespace UnityAutoTap
 				{
 					return;
 				}
+			}
+
+			AdvanceBoundOperations(deltaTime);
+			if (!Enabled)
+			{
+				return;
 			}
 
 			OnPostUpdate(deltaTime);

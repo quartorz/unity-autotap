@@ -1,7 +1,14 @@
 #if ENABLE_AUTOTAP
 using System;
+using System.Collections.Generic;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
+using UnityEngine.InputSystem.LowLevel;
+using BindingFlags = System.Reflection.BindingFlags;
+using PropertyInfo = System.Reflection.PropertyInfo;
 
 namespace UnityAutoTap
 {
@@ -24,6 +31,14 @@ namespace UnityAutoTap
 		/// <param name="controlPath">The path of the control relative to the device, for example <c>leftStick</c>.</param>
 		/// <param name="value">The value to write.</param>
 		public static ControlValue Of<T>(string controlPath, T value) where T : struct
+		{
+			return new ControlValue(controlPath, value);
+		}
+
+		/// <summary>
+		/// Creates a value from a boxed value of the value type of the control.
+		/// </summary>
+		internal static ControlValue OfObject(string controlPath, object value)
 		{
 			return new ControlValue(controlPath, value);
 		}
@@ -59,22 +74,81 @@ namespace UnityAutoTap
 	/// </remarks>
 	public class VirtualDevice
 	{
-		internal VirtualDevice()
+		static readonly PropertyInfo s_DontReset =
+			typeof(InputControl).GetProperty("dontReset", BindingFlags.Instance | BindingFlags.NonPublic);
+
+		readonly VirtualInputCore _core;
+		readonly InputDevice _device;
+		readonly int _offset;
+		readonly int _size;
+		readonly byte[] _shadow;
+		readonly byte[] _scratch;
+		readonly byte[] _defaultState;
+		readonly byte[] _keepMask;
+		readonly InputControl[] _zeroed;
+		readonly Vector2Control _position;
+		readonly InputControl _delta;
+		readonly Dictionary<string, InputControl> _controls = new Dictionary<string, InputControl>();
+		readonly HashSet<InputControl> _writable = new HashSet<InputControl>();
+		long _lastQueuedStamp = -1;
+
+		internal VirtualDevice(VirtualInputCore core, InputDevice device)
 		{
+			_core = core;
+			_device = device;
+			_offset = (int)device.stateBlock.byteOffset;
+			_size = (int)((device.stateBlock.sizeInBits + 7) >> 3);
+			_shadow = new byte[_size];
+			_scratch = new byte[_size];
+			_defaultState = new byte[_size];
+			ReadState(device, _shadow, useDefaultState: false);
+			ReadState(device, _defaultState, useDefaultState: true);
+			_keepMask = BuildKeepMask(device, _offset, _size);
+
+			var zeroed = new List<InputControl>();
+			if (device is Pointer pointer)
+			{
+				_position = pointer.position;
+				_delta = pointer.delta;
+				zeroed.Add(pointer.delta);
+			}
+
+			if (device is Mouse mouse)
+			{
+				zeroed.Add(mouse.scroll);
+			}
+
+			_zeroed = zeroed.ToArray();
+			ZeroDeltas(_shadow);
 		}
 
 		/// <summary>
 		/// The underlying Input System device.
 		/// </summary>
-		public InputDevice Device => throw new NotImplementedException();
+		public InputDevice Device => _device;
 
 		/// <summary>
 		/// Writes several controls with a single event, so that the changes are processed as simultaneous.
 		/// </summary>
 		/// <param name="values">The controls and their values.</param>
+		/// <exception cref="ArgumentException">
+		/// A path names no control of the device, or a value does not fit the control. Nothing is queued then.
+		/// </exception>
 		public void Queue(params ControlValue[] values)
 		{
-			throw new NotImplementedException();
+			if (values == null)
+			{
+				throw new ArgumentNullException(nameof(values));
+			}
+
+			var controls = new InputControl[values.Length];
+			var converted = new object[values.Length];
+			for (var i = 0; i < values.Length; ++i)
+			{
+				controls[i] = ResolveForWrite(values[i].ControlPath, values[i].Value, out converted[i]);
+			}
+
+			QueueEvent(controls, converted, reset: false);
 		}
 
 		/// <summary>
@@ -83,9 +157,10 @@ namespace UnityAutoTap
 		/// <typeparam name="T">The value type of the control.</typeparam>
 		/// <param name="controlPath">The path of the control relative to the device, for example <c>buttonSouth</c>.</param>
 		/// <param name="value">The value to write.</param>
+		/// <exception cref="ArgumentException">The path names no control of the device, or the value does not fit it.</exception>
 		public void Set<T>(string controlPath, T value) where T : struct
 		{
-			throw new NotImplementedException();
+			Queue(ControlValue.Of(controlPath, value));
 		}
 
 		/// <summary>
@@ -123,70 +198,359 @@ namespace UnityAutoTap
 		/// </summary>
 		public void ResetToDefault()
 		{
-			throw new NotImplementedException();
-		}
-	}
-
-	/// <summary>
-	/// A virtual <see cref="Pointer"/> device other than a touchscreen: a <see cref="Mouse"/>, a <see cref="Pen"/> or
-	/// any other layout derived from <see cref="Pointer"/>.
-	/// </summary>
-	/// <remarks>
-	/// The position of the pointer stays where it was left, and the UI under it keeps being hovered.
-	/// </remarks>
-	public sealed class VirtualPointer : VirtualDevice
-	{
-		internal VirtualPointer()
-		{
+			QueueEvent(Array.Empty<InputControl>(), Array.Empty<object>(), reset: true);
 		}
 
 		/// <summary>
-		/// Moves the pointer to <paramref name="position"/>. While a button is pressed this is a drag; otherwise it
-		/// is a hover.
+		/// <see cref="VirtualInputCore.EndedUpdates"/> when the last event was queued, or -1 before.
 		/// </summary>
-		/// <param name="position">The position in screen pixels.</param>
-		public void MoveTo(Vector2 position)
+		internal long LastQueuedStamp => _lastQueuedStamp;
+
+		/// <summary>
+		/// The number of Dynamic input updates that ended.
+		/// </summary>
+		internal long UpdatesEnded => _core.EndedUpdates;
+
+		/// <summary>
+		/// <c>true</c> if an event was queued that no input update has consumed yet.
+		/// </summary>
+		internal bool HasPending => _lastQueuedStamp >= _core.EndedUpdates;
+
+		/// <summary>
+		/// <c>true</c> if an event of this device was processed since the end of the previous Dynamic input update.
+		/// </summary>
+		internal bool ProcessedSinceLastUpdate { get; set; }
+
+		/// <summary>
+		/// Finds a control by its path relative to the device.
+		/// </summary>
+		/// <exception cref="ArgumentException">The device has no such control.</exception>
+		internal InputControl FindControl(string controlPath)
 		{
-			throw new NotImplementedException();
+			if (string.IsNullOrEmpty(controlPath))
+			{
+				throw new ArgumentException("The control path is empty.", nameof(controlPath));
+			}
+
+			if (!_controls.TryGetValue(controlPath, out var control))
+			{
+				control = _device.TryGetChildControl(controlPath);
+				if (control == null)
+				{
+					throw new ArgumentException(
+						$"The device '{_device.name}' (layout '{_device.layout}') has no control '{controlPath}'.",
+						nameof(controlPath));
+				}
+
+				_controls[controlPath] = control;
+			}
+
+			return control;
 		}
 
 		/// <summary>
-		/// Presses a button.
+		/// Finds the control to write and converts the value to its type.
 		/// </summary>
-		/// <param name="button">
-		/// The path of a button control relative to the device, for example <c>rightButton</c> of a mouse or
-		/// <c>eraser</c> of a pen. <c>null</c> selects the control whose usage is
-		/// <see cref="CommonUsages.PrimaryAction"/> (the left button of a mouse, the tip of a pen).
-		/// </param>
-		public void Press(string button = null)
+		/// <exception cref="ArgumentException">
+		/// There is no such control, it cannot be written, or the value does not fit it.
+		/// </exception>
+		internal InputControl ResolveForWrite(string controlPath, object value, out object converted)
 		{
-			throw new NotImplementedException();
+			var control = FindControl(controlPath);
+			if (value == null)
+			{
+				throw new ArgumentException($"The value for '{controlPath}' is null.", nameof(value));
+			}
+
+			converted = ConvertForControl(control, value);
+			CheckWritable(control);
+			return control;
 		}
 
 		/// <summary>
-		/// Releases a button.
+		/// Checks that a value of <paramref name="valueType"/> can be written to the control, without having a value.
 		/// </summary>
-		/// <param name="button">The button to release. See <see cref="Press"/>.</param>
-		public void Release(string button = null)
+		/// <exception cref="ArgumentException">
+		/// There is no such control, it cannot be written, or a value of the type does not fit it.
+		/// </exception>
+		internal InputControl ResolveForWrite(string controlPath, Type valueType)
 		{
-			throw new NotImplementedException();
+			var control = FindControl(controlPath);
+			if (!TypesFit(valueType, control.valueType))
+			{
+				throw new ArgumentException(
+					$"The control '{controlPath}' takes a {control.valueType.Name}, not a {valueType.Name}.",
+					nameof(valueType));
+			}
+
+			CheckWritable(control);
+			return control;
+		}
+
+		static bool TypesFit(Type valueType, Type controlType)
+		{
+			return valueType == controlType || (valueType.IsPrimitive && controlType.IsPrimitive);
+		}
+
+		static object ConvertForControl(InputControl control, object value)
+		{
+			var valueType = value.GetType();
+			if (!TypesFit(valueType, control.valueType))
+			{
+				throw new ArgumentException(
+					$"The control '{control.name}' takes a {control.valueType.Name}, not a {valueType.Name}.");
+			}
+
+			return Interpolation.ConvertTo(value, control.valueType);
+		}
+
+		internal unsafe void CheckWritable(InputControl control)
+		{
+			if (_writable.Contains(control))
+			{
+				return;
+			}
+
+			fixed (byte* scratch = _scratch)
+			{
+				try
+				{
+					control.WriteValueFromObjectIntoState(Activator.CreateInstance(control.valueType), scratch - _offset);
+				}
+				catch (NotSupportedException)
+				{
+					throw new ArgumentException(
+						$"The control '{control.name}' of '{_device.name}' computes its value from other controls and cannot be written. Write the controls it is made of.");
+				}
+			}
+
+			_writable.Add(control);
 		}
 
 		/// <summary>
-		/// Scrolls.
+		/// Reads the value that a control has in the state that was queued last, before the processors of the control.
 		/// </summary>
-		/// <param name="delta">The amount of one event, in the unit of the <c>scroll</c> control of the device.</param>
-		public void Scroll(Vector2 delta)
+		internal unsafe object ReadControl(InputControl control)
 		{
-			throw new NotImplementedException();
+			fixed (byte* shadow = _shadow)
+			{
+				return ReadUnprocessed(control, shadow - _offset);
+			}
 		}
 
 		/// <summary>
-		/// The prediction for the press, move or release that was processed last. It is refreshed at the end of each
-		/// input update that processed such an event of this pointer, before
-		/// <see cref="IVirtualInput.InputUpdated"/> is raised.
+		/// Reads a control of a given value type without boxing.
 		/// </summary>
-		public PointerPrediction Prediction => throw new NotImplementedException();
+		internal unsafe T ReadControl<T>(InputControl<T> control) where T : struct
+		{
+			fixed (byte* shadow = _shadow)
+			{
+				return control.ReadUnprocessedValueFromState(shadow - _offset);
+			}
+		}
+
+		static unsafe object ReadUnprocessed(InputControl control, byte* statePtr)
+		{
+			switch (control)
+			{
+				case InputControl<float> c:
+					return c.ReadUnprocessedValueFromState(statePtr);
+				case InputControl<Vector2> c:
+					return c.ReadUnprocessedValueFromState(statePtr);
+				case InputControl<Vector3> c:
+					return c.ReadUnprocessedValueFromState(statePtr);
+				case InputControl<Quaternion> c:
+					return c.ReadUnprocessedValueFromState(statePtr);
+				case InputControl<int> c:
+					return c.ReadUnprocessedValueFromState(statePtr);
+				case InputControl<double> c:
+					return c.ReadUnprocessedValueFromState(statePtr);
+				default:
+					return control.ReadValueFromStateAsObject(statePtr);
+			}
+		}
+
+		/// <summary>
+		/// Queues one event that writes the values, or, with <paramref name="reset"/>, one event that also returns
+		/// the controls that a reset changes to their defaults first.
+		/// </summary>
+		/// <returns>The stamp of the event (<see cref="VirtualInputCore.EndedUpdates"/> when it was queued).</returns>
+		internal unsafe long QueueEvent(InputControl[] controls, object[] values, bool reset)
+		{
+			if (!_device.added)
+			{
+				throw new InvalidOperationException($"The device '{_device.name}' is not part of the Input System any more.");
+			}
+
+			// The event is allocated with Allocator.Temp, which needs no disposing.
+			StateEvent.From(_device, out var eventPtr, Allocator.Temp);
+			var stateEvent = StateEvent.From(eventPtr);
+			var state = (byte*)stateEvent->state;
+
+			fixed (byte* shadow = _shadow)
+			{
+				UnsafeUtility.MemCpy(state, shadow, _size);
+			}
+
+			if (reset)
+			{
+				ApplyReset(state);
+			}
+
+			var previousPosition = _position != null ? ReadControl(_position) : default;
+			for (var i = 0; i < controls.Length; ++i)
+			{
+				var control = controls[i];
+				var statePtr = control.GetStatePtrFromStateEvent(eventPtr);
+				if (statePtr == null)
+				{
+					throw new ArgumentException($"The control '{control.name}' is not part of the state of '{_device.name}'.");
+				}
+
+				control.WriteValueFromObjectIntoState(values[i], statePtr);
+			}
+
+			if (_position != null)
+			{
+				var newPosition = _position.ReadUnprocessedValueFromState(state - _offset);
+				if (newPosition != previousPosition)
+				{
+					_delta.WriteValueFromObjectIntoState(newPosition - previousPosition, state - _offset);
+				}
+			}
+
+			fixed (byte* shadow = _shadow)
+			{
+				UnsafeUtility.MemCpy(shadow, state, _size);
+				ZeroDeltas(shadow);
+			}
+
+			InputSystem.QueueEvent(eventPtr);
+			_lastQueuedStamp = _core.EndedUpdates;
+			return _lastQueuedStamp;
+		}
+
+		/// <summary>
+		/// Queues one event that returns the controls that a reset changes to their defaults, unless that changes
+		/// nothing.
+		/// </summary>
+		/// <returns>The stamp of the event, or -1 if nothing was queued.</returns>
+		internal long QueueResetIfNeeded()
+		{
+			return ResetWouldChange() ? QueueEvent(Array.Empty<InputControl>(), Array.Empty<object>(), reset: true) : -1;
+		}
+
+		/// <summary>
+		/// Tells whether a reset would change the state that was queued last.
+		/// </summary>
+		internal unsafe bool ResetWouldChange()
+		{
+			for (var i = 0; i < _size; ++i)
+			{
+				var keep = _keepMask[i];
+				var reset = (byte)((_shadow[i] & keep) | (_defaultState[i] & ~keep));
+				if (reset != _shadow[i])
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/// <summary>
+		/// Takes the state of the device as it is after the Input System reset it.
+		/// </summary>
+		internal unsafe void ResyncAfterReset()
+		{
+			if (!_device.added)
+			{
+				return;
+			}
+
+			ReadState(_device, _shadow, useDefaultState: false);
+			fixed (byte* shadow = _shadow)
+			{
+				ZeroDeltas(shadow);
+			}
+		}
+
+		unsafe void ApplyReset(byte* state)
+		{
+			for (var i = 0; i < _size; ++i)
+			{
+				var keep = _keepMask[i];
+				state[i] = (byte)((state[i] & keep) | (_defaultState[i] & ~keep));
+			}
+		}
+
+		unsafe void ZeroDeltas(byte[] buffer)
+		{
+			fixed (byte* pointer = buffer)
+			{
+				ZeroDeltas(pointer);
+			}
+		}
+
+		unsafe void ZeroDeltas(byte* state)
+		{
+			foreach (var control in _zeroed)
+			{
+				control.WriteValueFromObjectIntoState(Vector2.zero, state - _offset);
+			}
+		}
+
+		static unsafe void ReadState(InputDevice device, byte[] destination, bool useDefaultState)
+		{
+			// The event is allocated with Allocator.Temp, which needs no disposing.
+			InputEventPtr eventPtr;
+			if (useDefaultState)
+			{
+				StateEvent.FromDefaultStateFor(device, out eventPtr, Allocator.Temp);
+			}
+			else
+			{
+				StateEvent.From(device, out eventPtr, Allocator.Temp);
+			}
+
+			var stateEvent = StateEvent.From(eventPtr);
+			fixed (byte* pointer = destination)
+			{
+				UnsafeUtility.MemCpy(pointer, stateEvent->state, destination.Length);
+			}
+		}
+
+		/// <summary>
+		/// Finds the bits that a reset leaves alone: the controls that are marked <c>dontReset</c>, which includes the
+		/// noisy ones.
+		/// </summary>
+		static byte[] BuildKeepMask(InputDevice device, int deviceOffset, int size)
+		{
+			if (s_DontReset == null)
+			{
+				throw new InvalidOperationException(
+					"This version of the Input System has no InputControl.dontReset, which the reset of a virtual device needs.");
+			}
+
+			var mask = new byte[size];
+			foreach (var control in device.allControls)
+			{
+				if (!(bool)s_DontReset.GetValue(control))
+				{
+					continue;
+				}
+
+				var block = control.stateBlock;
+				var first = (int)(block.byteOffset - deviceOffset) * 8 + (int)block.bitOffset;
+				var end = first + (int)block.sizeInBits;
+				for (var bit = Math.Max(0, first); bit < Math.Min(end, size * 8); ++bit)
+				{
+					mask[bit >> 3] |= (byte)(1 << (bit & 7));
+				}
+			}
+
+			return mask;
+		}
 	}
 }
 #endif

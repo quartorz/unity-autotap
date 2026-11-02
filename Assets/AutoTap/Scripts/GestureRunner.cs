@@ -7,51 +7,42 @@ namespace UnityAutoTap
 	/// <summary>
 	/// What a <see cref="GestureRunner"/> operates: a finger, or a pointer device.
 	/// </summary>
-	internal abstract class GestureTarget
+	internal interface IGestureTarget
 	{
 		/// <summary>
 		/// The position that was queued last.
 		/// </summary>
-		public abstract Vector2 Position { get; }
+		Vector2 Position { get; }
 
 		/// <summary>
 		/// Queues one event that moves to <paramref name="position"/>.
 		/// </summary>
-		public abstract void MoveTo(Vector2 position);
+		void MoveTo(Vector2 position);
 
 		/// <summary>
 		/// Reads the value that the control has in the state that was queued last.
 		/// </summary>
-		public abstract object ReadControl(string path);
+		object ReadControl(string path);
 
 		/// <summary>
 		/// Queues one event that writes <paramref name="value"/> to the control.
 		/// </summary>
-		public abstract void SetControl(string path, object value);
+		void SetControl(string path, object value);
 
 		/// <summary>
 		/// Queues one event that presses a button.
 		/// </summary>
-		public virtual void Press(string button)
-		{
-			throw new NotSupportedException();
-		}
+		void Press(string button);
 
 		/// <summary>
 		/// Queues one event that releases a button.
 		/// </summary>
-		public virtual void Release(string button)
-		{
-			throw new NotSupportedException();
-		}
+		void Release(string button);
 
 		/// <summary>
 		/// Queues one event that scrolls.
 		/// </summary>
-		public virtual void Scroll(Vector2 delta)
-		{
-			throw new NotSupportedException();
-		}
+		void Scroll(Vector2 delta);
 	}
 
 	/// <summary>
@@ -68,7 +59,7 @@ namespace UnityAutoTap
 	{
 		readonly Gesture _gesture;
 		readonly int _stepCount;
-		readonly GestureTarget _target;
+		readonly IGestureTarget _target;
 
 		int _index = 1;
 		float _elapsed;
@@ -78,7 +69,7 @@ namespace UnityAutoTap
 		object _fromValue;
 		object _toValue;
 
-		public GestureRunner(Gesture gesture, int stepCount, GestureTarget target)
+		public GestureRunner(Gesture gesture, int stepCount, IGestureTarget target)
 		{
 			_gesture = gesture;
 			_stepCount = stepCount;
@@ -91,18 +82,43 @@ namespace UnityAutoTap
 		public bool Done { get; private set; }
 
 		/// <summary>
-		/// Why the gesture is done: <see cref="AutoTapBase.EndReason.Finished"/> or
-		/// <see cref="AutoTapBase.EndReason.TimedOut"/>.
+		/// Why the gesture is done: <see cref="AutoTapBase.EndReason.Finished"/>,
+		/// <see cref="AutoTapBase.EndReason.TimedOut"/> or <see cref="AutoTapBase.EndReason.Refused"/>.
 		/// </summary>
 		public AutoTapBase.EndReason Reason { get; private set; } = AutoTapBase.EndReason.Finished;
+
+		/// <summary>
+		/// <c>true</c> if the last <see cref="Advance"/> pressed a button. What is pressed is not released in the same
+		/// input update, so the caller waits for the next frame before it ends the operation.
+		/// </summary>
+		public bool PressedInLastAdvance { get; private set; }
 
 		/// <summary>
 		/// Raised when a move starts, with its destination.
 		/// </summary>
 		public Action<Vector2> MoveStarted;
 
+		/// <summary>
+		/// Stops the gesture because a press was refused. The caller ends the operation with
+		/// <see cref="AutoTapBase.EndReason.Refused"/>.
+		/// </summary>
+		public void Refuse()
+		{
+			Reason = AutoTapBase.EndReason.Refused;
+			Done = true;
+		}
+
+		/// <summary>
+		/// Carries out the steps for one frame.
+		/// </summary>
+		/// <remarks>
+		/// A release step that comes after a press of the same call waits for the next call, so that a button is
+		/// never pressed and released by one input update.
+		/// </remarks>
+		/// <param name="deltaTime">The time since the previous call, in seconds.</param>
 		public void Advance(float deltaTime)
 		{
+			PressedInLastAdvance = false;
 			var remaining = Mathf.Max(0f, deltaTime);
 			while (!Done)
 			{
@@ -233,9 +249,19 @@ namespace UnityAutoTap
 					}
 					case Gesture.StepKind.Press:
 						_target.Press(step.Button);
+						if (!Done)
+						{
+							PressedInLastAdvance = true;
+						}
+
 						Next();
 						break;
 					case Gesture.StepKind.Release:
+						if (PressedInLastAdvance)
+						{
+							return;
+						}
+
 						_target.Release(step.Button);
 						Next();
 						break;

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Layouts;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.InputSystem.UI;
 #if UNITY_EDITOR
@@ -44,6 +45,9 @@ namespace UnityAutoTap
 		readonly InputChangeReader _reader;
 		readonly Dictionary<int, VirtualFinger> _fingers = new Dictionary<int, VirtualFinger>();
 		readonly List<VirtualFinger> _touched = new List<VirtualFinger>();
+		readonly List<ButtonTrack> _touchedTracks = new List<ButtonTrack>();
+		readonly Dictionary<string, VirtualDevice> _virtualDevices = new Dictionary<string, VirtualDevice>();
+		readonly Dictionary<InputDevice, VirtualDevice> _byDevice = new Dictionary<InputDevice, VirtualDevice>();
 		readonly List<VirtualFinger> _settled = new List<VirtualFinger>();
 		readonly Dictionary<InputSystemUIInputModule, UIPointerBehavior> _modules =
 			new Dictionary<InputSystemUIInputModule, UIPointerBehavior>();
@@ -72,6 +76,7 @@ namespace UnityAutoTap
 
 			_reader = new InputChangeReader(VirtualInput.IsVirtual);
 			_reader.Changed += OnChange;
+			_reader.EventProcessed += OnEventProcessed;
 			InputSystem.onBeforeUpdate += OnBeforeUpdate;
 			InputSystem.onAfterUpdate += OnAfterUpdate;
 			Application.quitting += OnQuitting;
@@ -209,9 +214,20 @@ namespace UnityAutoTap
 		/// </summary>
 		bool IsConsistent()
 		{
-			return !_tornDown
-				&& InputSystem.settings == _replacedSettings
-				&& (_touchscreen == null || IsInInputSystem(_touchscreen));
+			if (_tornDown || InputSystem.settings != _replacedSettings)
+			{
+				return false;
+			}
+
+			foreach (var device in _devices)
+			{
+				if (!IsInInputSystem(device))
+				{
+					return false;
+				}
+			}
+
+			return true;
 		}
 
 		public void ReleaseReference()
@@ -241,6 +257,17 @@ namespace UnityAutoTap
 				}
 
 				outstanding = true;
+			}
+
+			foreach (var device in _virtualDevices.Values)
+			{
+				// Whatever is pressed or tilted is returned to its default; the release has to be processed before
+				// the device goes away.
+				device.QueueResetIfNeeded();
+				if (device.HasPending)
+				{
+					outstanding = true;
+				}
 			}
 
 			if (outstanding)
@@ -288,8 +315,117 @@ namespace UnityAutoTap
 			return created;
 		}
 
+		static string KeyOf(string layout, int number)
+		{
+			return $"{layout.ToLowerInvariant()}#{number}";
+		}
+
+		public VirtualPointer GetPointer(string layout, int number)
+		{
+			if (_tornDown)
+			{
+				throw new ObjectDisposedException(nameof(VirtualInput));
+			}
+
+			if (string.IsNullOrEmpty(layout))
+			{
+				throw new ArgumentException("The layout is empty.", nameof(layout));
+			}
+
+			if (_virtualDevices.TryGetValue(KeyOf(layout, number), out var existing))
+			{
+				if (existing is VirtualPointer pointer)
+				{
+					return pointer;
+				}
+
+				throw new ArgumentException(
+					$"The layout '{layout}' is not a pointer. Use GetDevice for devices that are not pointers.", nameof(layout));
+			}
+
+			var device = AddDevice(layout, number);
+			if (!(device is Pointer inputPointer) || device is Touchscreen)
+			{
+				InputSystem.RemoveDevice(device);
+				throw new ArgumentException(
+					device is Touchscreen
+						? "A touchscreen is operated through its fingers (NewFinger), not through GetPointer."
+						: $"The layout '{layout}' is not derived from Pointer. Use GetDevice for devices that are not pointers.",
+					nameof(layout));
+			}
+
+			var created = new VirtualPointer(this, inputPointer);
+			Register(KeyOf(layout, number), created);
+			return created;
+		}
+
+		public VirtualDevice GetDevice(string layout, int number)
+		{
+			throw new NotImplementedException();
+		}
+
+		static InputDevice AddDevice(string layout, int number)
+		{
+			try
+			{
+				return InputSystem.AddDevice(layout, DeviceName(layout, number));
+			}
+			catch (InputControlLayout.LayoutNotFoundException e)
+			{
+				throw new ArgumentException($"There is no layout '{layout}'.", nameof(layout), e);
+			}
+		}
+
+		void Register(string key, VirtualDevice device)
+		{
+			_virtualDevices[key] = device;
+			_byDevice[device.Device] = device;
+			_devices.Add(device.Device);
+		}
+
+		/// <summary>
+		/// Called for every event that the Input System processed for a virtual device.
+		/// </summary>
+		void OnEventProcessed(InputDevice device)
+		{
+			if (_byDevice.TryGetValue(device, out var virtualDevice))
+			{
+				virtualDevice.ProcessedSinceLastUpdate = true;
+			}
+		}
+
+		/// <summary>
+		/// Makes the track one that is processed at the end of the input update.
+		/// </summary>
+		public void Touch(ButtonTrack track)
+		{
+			if (!track.Update.Touched)
+			{
+				var position = track.LastPosition;
+				track.Update = FingerUpdate.Fresh;
+				track.Update.LastPosition = position;
+				_touchedTracks.Add(track);
+			}
+		}
+
 		void OnChange(InputChange change)
 		{
+			if (change.Device == null)
+			{
+				return;
+			}
+
+			if (_byDevice.TryGetValue(change.Device, out var virtualDevice))
+			{
+				if (change is DeviceReset)
+				{
+					virtualDevice.ResyncAfterReset();
+				}
+
+				(virtualDevice as VirtualPointer)?.OnChange(change, this);
+				return;
+			}
+
 			if (_touchscreen == null || change.Device != _touchscreen)
 			{
 				return;
@@ -429,7 +565,36 @@ namespace UnityAutoTap
 
 			_touched.Clear();
 
+			foreach (var track in _touchedTracks)
+			{
+				var update = track.Update;
+				track.Update.Touched = false;
+				track.LastPosition = update.LastPosition;
+				if (update.Pressed || update.Released || track.Predictor.Active)
+				{
+					track.Predictor.Process(
+						update.LastPosition,
+						update.Pressed,
+						update.Released,
+						update.LastOrder,
+						update.LastFrame,
+						update.FirstBeyondOrder,
+						update.FirstBeyondFrame);
+				}
+				else
+				{
+					track.Predictor.NotePosition(update.LastPosition);
+				}
+			}
+
+			_touchedTracks.Clear();
+
 			RaiseInputUpdated();
+
+			foreach (var device in _virtualDevices.Values)
+			{
+				device.ProcessedSinceLastUpdate = false;
+			}
 
 			_settled.Clear();
 			foreach (var finger in _fingers.Values)
@@ -451,7 +616,7 @@ namespace UnityAutoTap
 			{
 				if (_drainStage == 0)
 				{
-					if (_fingers.Count == 0)
+					if (_fingers.Count == 0 && !AnyDevicePending())
 					{
 						_drainStage = 1;
 					}
@@ -467,6 +632,19 @@ namespace UnityAutoTap
 			{
 				TrackModule(module);
 			}
+		}
+
+		bool AnyDevicePending()
+		{
+			foreach (var device in _virtualDevices.Values)
+			{
+				if (device.HasPending)
+				{
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		void RaiseInputUpdated()
@@ -561,6 +739,7 @@ namespace UnityAutoTap
 			EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
 #endif
 			_reader.Changed -= OnChange;
+			_reader.EventProcessed -= OnEventProcessed;
 			_reader.Dispose();
 
 			foreach (var device in _devices)
@@ -574,6 +753,9 @@ namespace UnityAutoTap
 			_devices.Clear();
 			_fingers.Clear();
 			_touched.Clear();
+			_touchedTracks.Clear();
+			_virtualDevices.Clear();
+			_byDevice.Clear();
 
 			foreach (var pair in _modules)
 			{
