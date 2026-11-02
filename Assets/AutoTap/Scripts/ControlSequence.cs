@@ -1,5 +1,6 @@
 #if ENABLE_AUTOTAP
 using System;
+using System.Collections.Generic;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 
@@ -28,13 +29,60 @@ namespace UnityAutoTap
 	/// </remarks>
 	public sealed class ControlSequence
 	{
+		internal enum StepKind
+		{
+			Press,
+			Release,
+			Set,
+			Text,
+			Composition,
+			Hold,
+			HoldUntil,
+		}
+
+		internal sealed class Step
+		{
+			public StepKind Kind;
+
+			/// <summary>
+			/// A control path, a <see cref="Key"/> or a <see cref="GamepadButton"/>.
+			/// </summary>
+			public object Control;
+			public object Value;
+			public Type ValueType;
+			public string Text;
+			public float Seconds;
+			public Func<bool> Condition;
+		}
+
+		internal readonly List<Step> Steps = new List<Step>();
+
+		static void RequireSeconds(float seconds)
+		{
+			if (float.IsNaN(seconds) || seconds < 0)
+			{
+				throw new ArgumentOutOfRangeException(nameof(seconds), "The time must not be negative.");
+			}
+		}
+
+		static string RequirePath(string controlPath)
+		{
+			if (string.IsNullOrEmpty(controlPath))
+			{
+				throw new ArgumentException("The control path is empty.", nameof(controlPath));
+			}
+
+			return controlPath;
+		}
+
 		/// <summary>
 		/// Presses a button-like control: writes 1 to it.
 		/// </summary>
 		/// <param name="controlPath">The path of the control relative to the device.</param>
 		public ControlSequence Press(string controlPath)
 		{
-			throw new NotImplementedException();
+			Steps.Add(new Step { Kind = StepKind.Press, Control = RequirePath(controlPath) });
+			return this;
 		}
 
 		/// <summary>
@@ -43,7 +91,8 @@ namespace UnityAutoTap
 		/// <param name="controlPath">The path of the control relative to the device.</param>
 		public ControlSequence Release(string controlPath)
 		{
-			throw new NotImplementedException();
+			Steps.Add(new Step { Kind = StepKind.Release, Control = RequirePath(controlPath) });
+			return this;
 		}
 
 		/// <summary>
@@ -52,7 +101,8 @@ namespace UnityAutoTap
 		/// <param name="key">The key to press.</param>
 		public ControlSequence Press(Key key)
 		{
-			throw new NotImplementedException();
+			Steps.Add(new Step { Kind = StepKind.Press, Control = key });
+			return this;
 		}
 
 		/// <summary>
@@ -61,7 +111,8 @@ namespace UnityAutoTap
 		/// <param name="key">The key to release.</param>
 		public ControlSequence Release(Key key)
 		{
-			throw new NotImplementedException();
+			Steps.Add(new Step { Kind = StepKind.Release, Control = key });
+			return this;
 		}
 
 		/// <summary>
@@ -70,7 +121,8 @@ namespace UnityAutoTap
 		/// <param name="button">The button to press.</param>
 		public ControlSequence Press(GamepadButton button)
 		{
-			throw new NotImplementedException();
+			Steps.Add(new Step { Kind = StepKind.Press, Control = button });
+			return this;
 		}
 
 		/// <summary>
@@ -79,7 +131,8 @@ namespace UnityAutoTap
 		/// <param name="button">The button to release.</param>
 		public ControlSequence Release(GamepadButton button)
 		{
-			throw new NotImplementedException();
+			Steps.Add(new Step { Kind = StepKind.Release, Control = button });
+			return this;
 		}
 
 		/// <summary>
@@ -95,7 +148,16 @@ namespace UnityAutoTap
 		/// <param name="seconds">The time the change takes. 0 sets the value at once.</param>
 		public ControlSequence Set<T>(string controlPath, T value, float seconds = 0) where T : struct
 		{
-			throw new NotImplementedException();
+			RequireSeconds(seconds);
+			Steps.Add(new Step
+			{
+				Kind = StepKind.Set,
+				Control = RequirePath(controlPath),
+				Value = value,
+				ValueType = typeof(T),
+				Seconds = seconds,
+			});
+			return this;
 		}
 
 		/// <summary>
@@ -104,7 +166,13 @@ namespace UnityAutoTap
 		/// <param name="text">The characters to enter.</param>
 		public ControlSequence Text(string text)
 		{
-			throw new NotImplementedException();
+			if (text == null)
+			{
+				throw new ArgumentNullException(nameof(text));
+			}
+
+			Steps.Add(new Step { Kind = StepKind.Text, Text = text });
+			return this;
 		}
 
 		/// <summary>
@@ -114,7 +182,13 @@ namespace UnityAutoTap
 		/// <param name="text">The text being composed.</param>
 		public ControlSequence Composition(string text)
 		{
-			throw new NotImplementedException();
+			if (text == null)
+			{
+				throw new ArgumentNullException(nameof(text));
+			}
+
+			Steps.Add(new Step { Kind = StepKind.Composition, Text = text });
+			return this;
 		}
 
 		/// <summary>
@@ -123,7 +197,9 @@ namespace UnityAutoTap
 		/// <param name="seconds">The time to wait.</param>
 		public ControlSequence Hold(float seconds)
 		{
-			throw new NotImplementedException();
+			RequireSeconds(seconds);
+			Steps.Add(new Step { Kind = StepKind.Hold, Seconds = seconds });
+			return this;
 		}
 
 		/// <summary>
@@ -135,7 +211,14 @@ namespace UnityAutoTap
 		/// <param name="timeoutSeconds">The longest time to wait.</param>
 		public ControlSequence HoldUntil(Func<bool> condition, float timeoutSeconds)
 		{
-			throw new NotImplementedException();
+			if (condition == null)
+			{
+				throw new ArgumentNullException(nameof(condition));
+			}
+
+			RequireSeconds(timeoutSeconds);
+			Steps.Add(new Step { Kind = StepKind.HoldUntil, Condition = condition, Seconds = timeoutSeconds });
+			return this;
 		}
 	}
 }

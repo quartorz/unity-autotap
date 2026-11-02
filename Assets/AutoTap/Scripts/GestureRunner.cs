@@ -1,0 +1,307 @@
+#if ENABLE_AUTOTAP
+using System;
+using UnityEngine;
+
+namespace UnityAutoTap
+{
+	/// <summary>
+	/// What a <see cref="GestureRunner"/> operates: a finger, or a pointer device.
+	/// </summary>
+	internal abstract class GestureTarget
+	{
+		/// <summary>
+		/// The position that was queued last.
+		/// </summary>
+		public abstract Vector2 Position { get; }
+
+		/// <summary>
+		/// Queues one event that moves to <paramref name="position"/>.
+		/// </summary>
+		public abstract void MoveTo(Vector2 position);
+
+		/// <summary>
+		/// Reads the value that the control has in the state that was queued last.
+		/// </summary>
+		public abstract object ReadControl(string path);
+
+		/// <summary>
+		/// Queues one event that writes <paramref name="value"/> to the control.
+		/// </summary>
+		public abstract void SetControl(string path, object value);
+
+		/// <summary>
+		/// Queues one event that presses a button.
+		/// </summary>
+		public virtual void Press(string button)
+		{
+			throw new NotSupportedException();
+		}
+
+		/// <summary>
+		/// Queues one event that releases a button.
+		/// </summary>
+		public virtual void Release(string button)
+		{
+			throw new NotSupportedException();
+		}
+
+		/// <summary>
+		/// Queues one event that scrolls.
+		/// </summary>
+		public virtual void Scroll(Vector2 delta)
+		{
+			throw new NotSupportedException();
+		}
+	}
+
+	/// <summary>
+	/// Carries out the steps of a <see cref="Gesture"/> after its first step, one <see cref="Advance"/> per frame.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// A step that takes time queues one event per <see cref="Advance"/>. A step that takes no time queues one event
+	/// and is followed at once by the next step, in the same <see cref="Advance"/>. The time that a step does not
+	/// use is passed on to the next one.
+	/// </para>
+	/// </remarks>
+	internal sealed class GestureRunner
+	{
+		readonly Gesture _gesture;
+		readonly int _stepCount;
+		readonly GestureTarget _target;
+
+		int _index = 1;
+		float _elapsed;
+		bool _started;
+		Vector2 _from;
+		Vector2 _to;
+		object _fromValue;
+		object _toValue;
+
+		public GestureRunner(Gesture gesture, int stepCount, GestureTarget target)
+		{
+			_gesture = gesture;
+			_stepCount = stepCount;
+			_target = target;
+		}
+
+		/// <summary>
+		/// <c>true</c> once every step was carried out, or a <c>HoldUntil</c> timed out.
+		/// </summary>
+		public bool Done { get; private set; }
+
+		/// <summary>
+		/// Why the gesture is done: <see cref="AutoTapBase.EndReason.Finished"/> or
+		/// <see cref="AutoTapBase.EndReason.TimedOut"/>.
+		/// </summary>
+		public AutoTapBase.EndReason Reason { get; private set; } = AutoTapBase.EndReason.Finished;
+
+		/// <summary>
+		/// Raised when a move starts, with its destination.
+		/// </summary>
+		public Action<Vector2> MoveStarted;
+
+		public void Advance(float deltaTime)
+		{
+			var remaining = Mathf.Max(0f, deltaTime);
+			while (!Done)
+			{
+				if (_index >= _stepCount)
+				{
+					Done = true;
+					return;
+				}
+
+				var step = _gesture.Steps[_index];
+				switch (step.Kind)
+				{
+					case Gesture.StepKind.Move:
+					{
+						if (!_started)
+						{
+							if (step.Seconds > 0 && remaining <= 0)
+							{
+								return;
+							}
+
+							_from = _target.Position;
+							_to = step.PositionFunc != null ? step.PositionFunc() : step.Position;
+							_elapsed = 0;
+							_started = true;
+							MoveStarted?.Invoke(_to);
+						}
+
+						if (step.Seconds <= 0)
+						{
+							_target.MoveTo(_to);
+							Next();
+							break;
+						}
+
+						_elapsed += remaining;
+						var t = Mathf.Clamp01(_elapsed / step.Seconds);
+						_target.MoveTo(t >= 1f ? _to : Vector2.LerpUnclamped(_from, _to, t));
+						if (t < 1f)
+						{
+							return;
+						}
+
+						remaining = _elapsed - step.Seconds;
+						Next();
+						break;
+					}
+					case Gesture.StepKind.Set:
+					{
+						if (!_started)
+						{
+							if (step.Seconds > 0 && remaining <= 0)
+							{
+								return;
+							}
+
+							_fromValue = _target.ReadControl(step.Path);
+							_toValue = Interpolation.ConvertTo(step.Value, _fromValue.GetType());
+							_elapsed = 0;
+							_started = true;
+						}
+
+						if (step.Seconds <= 0)
+						{
+							_target.SetControl(step.Path, _toValue);
+							Next();
+							break;
+						}
+
+						_elapsed += remaining;
+						var t = Mathf.Clamp01(_elapsed / step.Seconds);
+						_target.SetControl(step.Path, t >= 1f ? _toValue : Interpolation.Lerp(_fromValue, _toValue, t));
+						if (t < 1f)
+						{
+							return;
+						}
+
+						remaining = _elapsed - step.Seconds;
+						Next();
+						break;
+					}
+					case Gesture.StepKind.Hold:
+					{
+						if (!_started)
+						{
+							if (step.Seconds > 0 && remaining <= 0)
+							{
+								return;
+							}
+
+							_started = true;
+							_elapsed = 0;
+						}
+
+						_elapsed += remaining;
+						if (_elapsed < step.Seconds)
+						{
+							return;
+						}
+
+						remaining = _elapsed - step.Seconds;
+						Next();
+						break;
+					}
+					case Gesture.StepKind.HoldUntil:
+					{
+						if (!_started)
+						{
+							_started = true;
+							_elapsed = 0;
+						}
+
+						if (step.Condition())
+						{
+							Next();
+							break;
+						}
+
+						_elapsed += remaining;
+						if (_elapsed >= step.Seconds)
+						{
+							Reason = AutoTapBase.EndReason.TimedOut;
+							Done = true;
+							return;
+						}
+
+						return;
+					}
+					case Gesture.StepKind.Press:
+						_target.Press(step.Button);
+						Next();
+						break;
+					case Gesture.StepKind.Release:
+						_target.Release(step.Button);
+						Next();
+						break;
+					case Gesture.StepKind.Scroll:
+						_target.Scroll(step.Delta);
+						Next();
+						break;
+					default:
+						throw new InvalidOperationException($"A step of kind {step.Kind} cannot follow the first step.");
+				}
+			}
+		}
+
+		void Next()
+		{
+			++_index;
+			_started = false;
+			_elapsed = 0;
+		}
+	}
+
+	/// <summary>
+	/// Interpolation of the values that a <see cref="Gesture"/> or a <see cref="ControlSequence"/> changes over time.
+	/// </summary>
+	internal static class Interpolation
+	{
+		/// <summary>
+		/// Converts a value to the type of a control.
+		/// </summary>
+		public static object ConvertTo(object value, Type type)
+		{
+			if (value.GetType() == type)
+			{
+				return value;
+			}
+
+			try
+			{
+				return Convert.ChangeType(value, type);
+			}
+			catch (Exception e) when (e is InvalidCastException || e is FormatException || e is OverflowException)
+			{
+				throw new ArgumentException($"A {value.GetType().Name} cannot be written to a control of {type.Name}.", e);
+			}
+		}
+
+		/// <summary>
+		/// Gives the value at <paramref name="t"/> between two values. Values that cannot be interpolated stay at
+		/// <paramref name="from"/> until the end.
+		/// </summary>
+		public static object Lerp(object from, object to, float t)
+		{
+			switch (from)
+			{
+				case float a:
+					return Mathf.LerpUnclamped(a, (float)to, t);
+				case Vector2 a:
+					return Vector2.LerpUnclamped(a, (Vector2)to, t);
+				case Vector3 a:
+					return Vector3.LerpUnclamped(a, (Vector3)to, t);
+				case Quaternion a:
+					return Quaternion.SlerpUnclamped(a, (Quaternion)to, t);
+				default:
+					return t >= 1f ? to : from;
+			}
+		}
+	}
+}
+#endif

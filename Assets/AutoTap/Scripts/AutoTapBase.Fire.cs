@@ -1,5 +1,6 @@
 #if ENABLE_AUTOTAP
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -53,7 +54,8 @@ namespace UnityAutoTap
 		/// <exception cref="ArgumentException">The plan cannot be carried out.</exception>
 		protected internal LogItem Fire(int index, Vector2 position, float duration)
 		{
-			throw new NotImplementedException();
+			var gesture = Gesture.PressAt(position).Hold(Mathf.Max(0f, duration));
+			return FireFinger(index, gesture, LogItemKind.Tap, duration);
 		}
 
 		/// <summary>
@@ -69,7 +71,8 @@ namespace UnityAutoTap
 		/// <exception cref="ArgumentException">The plan cannot be carried out.</exception>
 		protected internal LogItem Fire(int index, Vector2 from, Vector2 to, float duration)
 		{
-			throw new NotImplementedException();
+			var gesture = Gesture.PressAt(from).MoveTo(to, Mathf.Max(0f, duration));
+			return FireFinger(index, gesture, LogItemKind.Drag, duration);
 		}
 
 		/// <summary>
@@ -83,7 +86,12 @@ namespace UnityAutoTap
 		/// <exception cref="ArgumentException">The plan cannot be carried out.</exception>
 		protected internal LogItem Fire(int index, Gesture gesture)
 		{
-			throw new NotImplementedException();
+			if (gesture == null)
+			{
+				throw new ArgumentNullException(nameof(gesture));
+			}
+
+			return FireFinger(index, gesture, LogItemKind.Gesture, float.NaN);
 		}
 
 		/// <summary>
@@ -130,7 +138,7 @@ namespace UnityAutoTap
 		/// <returns>See <see cref="FirePointer"/>.</returns>
 		protected internal LogItem FireMouse(Gesture gesture, int number = 0)
 		{
-			throw new NotImplementedException();
+			return FirePointer("Mouse", gesture, number);
 		}
 
 		/// <summary>
@@ -141,7 +149,7 @@ namespace UnityAutoTap
 		/// <returns>See <see cref="FirePointer"/>.</returns>
 		protected internal LogItem FirePen(Gesture gesture, int number = 0)
 		{
-			throw new NotImplementedException();
+			return FirePointer("Pen", gesture, number);
 		}
 
 		/// <summary>
@@ -153,7 +161,7 @@ namespace UnityAutoTap
 		/// <returns>See <see cref="FirePointer"/>.</returns>
 		protected internal LogItem FireScroll(Vector2 screenPosition, Vector2 delta)
 		{
-			throw new NotImplementedException();
+			return FireMouse(Gesture.HoverAt(screenPosition).Scroll(delta));
 		}
 
 		/// <summary>
@@ -164,7 +172,7 @@ namespace UnityAutoTap
 		/// <returns>See <see cref="FireDevice"/>.</returns>
 		protected internal LogItem FireGamepad(ControlSequence sequence, int number = 0)
 		{
-			throw new NotImplementedException();
+			return FireDevice("Gamepad", sequence, number);
 		}
 
 		/// <summary>
@@ -177,7 +185,116 @@ namespace UnityAutoTap
 		/// <returns>See <see cref="FireDevice"/>.</returns>
 		protected internal LogItem FireKey(Key key, float duration = 0f, params Key[] modifiers)
 		{
-			throw new NotImplementedException();
+			var sequence = new ControlSequence();
+			if (modifiers != null)
+			{
+				foreach (var modifier in modifiers)
+				{
+					sequence.Press(modifier);
+				}
+			}
+
+			sequence.Press(key).Hold(Mathf.Max(0f, duration)).Release(key);
+			if (modifiers != null)
+			{
+				for (var i = modifiers.Length - 1; i >= 0; --i)
+				{
+					sequence.Release(modifiers[i]);
+				}
+			}
+
+			return FireDevice("Keyboard", sequence);
+		}
+
+		LogItem FireFinger(int index, Gesture gesture, LogItemKind kind, float duration)
+		{
+			if (_slots == null)
+			{
+				throw new InvalidOperationException("Setup has to be called before Fire.");
+			}
+
+			if (index < 0 || index >= _slots.Length)
+			{
+				throw new ArgumentOutOfRangeException(nameof(index), $"The slot has to be between 0 and {_slots.Length - 1}.");
+			}
+
+			var plan = gesture.PlanForFinger();
+			if (!Enabled || _slots[index] != null)
+			{
+				return null;
+			}
+
+			foreach (var point in plan.Points)
+			{
+				if (point.x < 0 || point.x > Screen.width || point.y < 0 || point.y > Screen.height)
+				{
+					return null;
+				}
+			}
+
+			var probe = PointerPredictor.Probe(plan.Start);
+			if (probe.Topmost.gameObject != null && ShouldNotPressOn(probe.Topmost))
+			{
+				return null;
+			}
+
+			var finger = _input.NewFinger();
+			if (finger == null)
+			{
+				return null;
+			}
+
+			LogItem item;
+			try
+			{
+				item = NewLogItem(index) ?? new LogItem();
+			}
+			catch
+			{
+				finger.Abandon();
+				throw;
+			}
+
+			item.Index = index;
+			item.Kind = kind;
+			item.Device = finger.Device;
+			item.DateTime = DateTime.Now;
+			item.Target = probe.Press;
+			item.ScreenPoint = plan.Start;
+			item.DragTo = plan.LastMove.HasValue && plan.LastMove.Value != plan.Start ? plan.LastMove : null;
+			item.FrameCount = Time.frameCount;
+			item.Duration = duration;
+			item.Order = null;
+			item.StartedFrameCount = 0;
+			item.Dragged = false;
+			item.DragStartedOrder = null;
+			item.DragStartedFrameCount = 0;
+			item.DragTarget = probe.Drag;
+			item.DropTarget = null;
+			item.Completed = false;
+			item.EndReason = EndReason.Finished;
+			item.CompletedOrder = null;
+			item.CompletedFrameCount = 0;
+			item.ClickExecuted = false;
+			item.ClickTarget = null;
+			item.Gesture = kind == LogItemKind.Gesture ? gesture : null;
+			item.Sequence = null;
+
+			var operation = new FingerOperation(index, item, ++_fireSequence, finger, gesture, plan.StepCount);
+			operation.Runner.MoveStarted = destination =>
+			{
+				if (destination != item.ScreenPoint)
+				{
+					item.DragTo = destination;
+				}
+			};
+
+			finger.Press(plan.Start);
+			ShowMarker(index, plan.Start);
+			_slots[index] = operation;
+			_operations.Add(operation);
+			_fingerOperations.Add(finger.TouchId, operation);
+			return item;
 		}
 
 		/// <summary>

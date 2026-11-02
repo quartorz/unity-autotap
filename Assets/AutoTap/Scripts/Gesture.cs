@@ -1,5 +1,6 @@
 #if ENABLE_AUTOTAP
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace UnityAutoTap
@@ -28,6 +29,35 @@ namespace UnityAutoTap
 	/// </remarks>
 	public sealed class Gesture
 	{
+		internal enum StepKind
+		{
+			Press,
+			Release,
+			Hover,
+			Move,
+			Scroll,
+			Set,
+			Hold,
+			HoldUntil,
+		}
+
+		internal sealed class Step
+		{
+			public StepKind Kind;
+			public bool HasPosition;
+			public Vector2 Position;
+			public Func<Vector2> PositionFunc;
+			public string Button;
+			public Vector2 Delta;
+			public string Path;
+			public object Value;
+			public Type ValueType;
+			public float Seconds;
+			public Func<bool> Condition;
+		}
+
+		internal readonly List<Step> Steps = new List<Step>();
+
 		Gesture()
 		{
 		}
@@ -44,7 +74,9 @@ namespace UnityAutoTap
 		/// </param>
 		public static Gesture PressAt(Vector2 position, string button = null)
 		{
-			throw new NotImplementedException();
+			var gesture = new Gesture();
+			gesture.Steps.Add(new Step { Kind = StepKind.Press, HasPosition = true, Position = position, Button = button });
+			return gesture;
 		}
 
 		/// <summary>
@@ -54,7 +86,9 @@ namespace UnityAutoTap
 		/// <param name="position">The position in screen pixels.</param>
 		public static Gesture HoverAt(Vector2 position)
 		{
-			throw new NotImplementedException();
+			var gesture = new Gesture();
+			gesture.Steps.Add(new Step { Kind = StepKind.Hover, HasPosition = true, Position = position });
+			return gesture;
 		}
 
 		/// <summary>
@@ -64,7 +98,9 @@ namespace UnityAutoTap
 		/// <param name="seconds">The time the move takes. 0 moves at once.</param>
 		public Gesture MoveTo(Vector2 position, float seconds)
 		{
-			throw new NotImplementedException();
+			RequireSeconds(seconds);
+			Steps.Add(new Step { Kind = StepKind.Move, HasPosition = true, Position = position, Seconds = seconds });
+			return this;
 		}
 
 		/// <summary>
@@ -75,7 +111,14 @@ namespace UnityAutoTap
 		/// <param name="seconds">The time the move takes. 0 moves at once.</param>
 		public Gesture MoveTo(Func<Vector2> position, float seconds)
 		{
-			throw new NotImplementedException();
+			if (position == null)
+			{
+				throw new ArgumentNullException(nameof(position));
+			}
+
+			RequireSeconds(seconds);
+			Steps.Add(new Step { Kind = StepKind.Move, PositionFunc = position, Seconds = seconds });
+			return this;
 		}
 
 		/// <summary>
@@ -84,7 +127,8 @@ namespace UnityAutoTap
 		/// <param name="button">The button to press. See <see cref="PressAt"/>.</param>
 		public Gesture Press(string button = null)
 		{
-			throw new NotImplementedException();
+			Steps.Add(new Step { Kind = StepKind.Press, Button = button });
+			return this;
 		}
 
 		/// <summary>
@@ -93,7 +137,8 @@ namespace UnityAutoTap
 		/// <param name="button">The button to release. See <see cref="PressAt"/>.</param>
 		public Gesture Release(string button = null)
 		{
-			throw new NotImplementedException();
+			Steps.Add(new Step { Kind = StepKind.Release, Button = button });
+			return this;
 		}
 
 		/// <summary>
@@ -102,7 +147,8 @@ namespace UnityAutoTap
 		/// <param name="delta">The amount, in the unit of the <c>scroll</c> control of the device.</param>
 		public Gesture Scroll(Vector2 delta)
 		{
-			throw new NotImplementedException();
+			Steps.Add(new Step { Kind = StepKind.Scroll, Delta = delta });
+			return this;
 		}
 
 		/// <summary>
@@ -121,7 +167,21 @@ namespace UnityAutoTap
 		/// <param name="seconds">The time the change takes. 0 sets the value at once.</param>
 		public Gesture Set<T>(string controlPath, T value, float seconds = 0) where T : struct
 		{
-			throw new NotImplementedException();
+			if (string.IsNullOrEmpty(controlPath))
+			{
+				throw new ArgumentException("The control path is empty.", nameof(controlPath));
+			}
+
+			RequireSeconds(seconds);
+			Steps.Add(new Step
+			{
+				Kind = StepKind.Set,
+				Path = controlPath,
+				Value = value,
+				ValueType = typeof(T),
+				Seconds = seconds,
+			});
+			return this;
 		}
 
 		/// <summary>
@@ -130,7 +190,9 @@ namespace UnityAutoTap
 		/// <param name="seconds">The time to wait.</param>
 		public Gesture Hold(float seconds)
 		{
-			throw new NotImplementedException();
+			RequireSeconds(seconds);
+			Steps.Add(new Step { Kind = StepKind.Hold, Seconds = seconds });
+			return this;
 		}
 
 		/// <summary>
@@ -142,8 +204,112 @@ namespace UnityAutoTap
 		/// <param name="timeoutSeconds">The longest time to wait.</param>
 		public Gesture HoldUntil(Func<bool> condition, float timeoutSeconds)
 		{
-			throw new NotImplementedException();
+			if (condition == null)
+			{
+				throw new ArgumentNullException(nameof(condition));
+			}
+
+			RequireSeconds(timeoutSeconds);
+			Steps.Add(new Step { Kind = StepKind.HoldUntil, Condition = condition, Seconds = timeoutSeconds });
+			return this;
 		}
+
+		static void RequireSeconds(float seconds)
+		{
+			if (float.IsNaN(seconds) || seconds < 0)
+			{
+				throw new ArgumentOutOfRangeException(nameof(seconds), "The time must not be negative.");
+			}
+		}
+
+		/// <summary>
+		/// Checks that the gesture can be carried out by a finger, and summarizes it.
+		/// </summary>
+		/// <exception cref="ArgumentException">The gesture does not fit a finger.</exception>
+		internal FingerPlan PlanForFinger()
+		{
+			if (Steps.Count == 0 || Steps[0].Kind != StepKind.Press || !Steps[0].HasPosition)
+			{
+				throw new ArgumentException("A gesture for a finger has to start with PressAt.", nameof(Steps));
+			}
+
+			if (Steps[0].Button != null)
+			{
+				throw new ArgumentException(
+					"A finger has only the touch, so PressAt takes no button.", nameof(Steps));
+			}
+
+			var count = Steps.Count;
+			if (count > 1 && Steps[count - 1].Kind == StepKind.Release && Steps[count - 1].Button == null)
+			{
+				--count;
+			}
+
+			var points = new List<Vector2> { Steps[0].Position };
+			Vector2? lastMove = null;
+			for (var i = 1; i < count; ++i)
+			{
+				var step = Steps[i];
+				switch (step.Kind)
+				{
+					case StepKind.Move:
+						if (step.PositionFunc == null)
+						{
+							points.Add(step.Position);
+							lastMove = step.Position;
+						}
+
+						break;
+					case StepKind.Set:
+						VirtualFinger.ValidateControl(step.Path, step.ValueType);
+						break;
+					case StepKind.Hold:
+					case StepKind.HoldUntil:
+						break;
+					default:
+						throw new ArgumentException(
+							$"A finger cannot do '{step.Kind}'. Use FirePointer for hovering, scrolling and buttons.",
+							nameof(Steps));
+				}
+			}
+
+			return new FingerPlan(Steps[0].Position, points, lastMove, count);
+		}
+	}
+
+	/// <summary>
+	/// What <see cref="Gesture.PlanForFinger"/> found out about a gesture.
+	/// </summary>
+	internal sealed class FingerPlan
+	{
+		public FingerPlan(Vector2 start, List<Vector2> points, Vector2? lastMove, int stepCount)
+		{
+			Start = start;
+			Points = points;
+			LastMove = lastMove;
+			StepCount = stepCount;
+		}
+
+		/// <summary>
+		/// The position of the press.
+		/// </summary>
+		public Vector2 Start { get; }
+
+		/// <summary>
+		/// The press position and every destination that is known before the gesture runs.
+		/// </summary>
+		public List<Vector2> Points { get; }
+
+		/// <summary>
+		/// The destination of the last move whose destination is known before the gesture runs.
+		/// </summary>
+		public Vector2? LastMove { get; }
+
+		/// <summary>
+		/// The number of steps to run: all steps except a release at the very end, which the end of the gesture does
+		/// anyway.
+		/// </summary>
+		public int StepCount { get; }
 	}
 }
 #endif

@@ -153,8 +153,10 @@ namespace UnityAutoTap
 		/// Tap if <paramref name="target"/> is not destroyed.
 		/// </summary>
 		/// <returns>
-		/// <c>true</c> if the tap was started. Where the press is delivered to is known only after the input update
-		/// that processes it (see <see cref="AutoTapBase.LogItem.Target"/>).
+		/// <c>true</c> if the tap was started and the press is predicted to be delivered to
+		/// <paramref name="target"/>, that is, <see cref="AutoTapBase.LogItem.Target"/> at the time of the call is
+		/// the game object of <paramref name="target"/>. The prediction follows the rules of the input module; it is
+		/// refreshed when the press is processed.
 		/// </returns>
 		protected bool TryTap(int index, Canvas canvas, RectTransform target, float duration)
 		{
@@ -163,7 +165,8 @@ namespace UnityAutoTap
 				var p = canvas != null && canvas.worldCamera != null
 					? GetScreenPoint(canvas.worldCamera, target)
 					: GetScreenPoint(target);
-				return Fire(index, p, duration) != null;
+				var fired = Fire(index, p, duration);
+				return fired != null && fired.Target == target.gameObject;
 			}
 
 			return false;

@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace UnityAutoTap
 {
@@ -92,7 +93,22 @@ namespace UnityAutoTap
 		/// </summary>
 		public bool Enabled { get; private set; }
 
-		readonly IVirtualInput _input;
+		readonly bool _ownsInput;
+		IVirtualInput _input;
+		VirtualInputSession _session;
+		IVirtualInput _subscribedTo;
+
+		FingerOperation[] _slots;
+		Image[] _markers;
+		Canvas _canvas;
+		readonly List<FingerOperation> _operations = new List<FingerOperation>();
+		readonly Dictionary<int, FingerOperation> _fingerOperations = new Dictionary<int, FingerOperation>();
+		readonly List<FingerOperation> _scratch = new List<FingerOperation>();
+		readonly List<LogEvent> _log = new List<LogEvent>();
+		readonly List<KeyValuePair<long, LogItem>> _tail = new List<KeyValuePair<long, LogItem>>();
+		bool _logIsStale;
+		int _logFrame;
+		long _fireSequence;
 
 		readonly Vector3[] _fourCorners = new Vector3[4];
 		readonly float[] _floats = new float[4];
@@ -103,6 +119,7 @@ namespace UnityAutoTap
 		/// </summary>
 		protected AutoTapBase()
 		{
+			_ownsInput = true;
 		}
 
 		/// <summary>
@@ -112,6 +129,7 @@ namespace UnityAutoTap
 		/// <param name="input">The source of the virtual devices.</param>
 		protected AutoTapBase(IVirtualInput input)
 		{
+			_ownsInput = input == null;
 			_input = input;
 		}
 
@@ -121,13 +139,40 @@ namespace UnityAutoTap
 		/// <param name="canvasForMarker">The canvas that shows the markers of the operations.</param>
 		/// <param name="markerSprite">The sprite of a marker.</param>
 		/// <param name="tapCount">
-		/// The number of slots, from 1 to 10
-		/// (<see cref="UnityEngine.InputSystem.LowLevel.TouchscreenState.MaxTouches"/>).
+		/// The number of slots, from 1 to 10, the number of touches that a touchscreen has.
 		/// </param>
 		protected virtual void SetupInternal(
 			Canvas canvasForMarker, Sprite markerSprite, int tapCount)
 		{
-			throw new NotImplementedException();
+			if (tapCount < 1 || tapCount > VirtualInputCore.MaxFingers)
+			{
+				throw new ArgumentOutOfRangeException(
+					nameof(tapCount), $"The tap count must be between 1 and {VirtualInputCore.MaxFingers}.");
+			}
+
+			DestroyMarkers();
+			Enabled = false;
+			_canvas = canvasForMarker;
+			_slots = new FingerOperation[tapCount];
+			_markers = new Image[tapCount];
+			if (canvasForMarker == null)
+			{
+				return;
+			}
+
+			for (var i = 0; i < tapCount; ++i)
+			{
+				var markerGameObject = new GameObject($"Marker {i + 1}");
+				markerGameObject.transform.SetParent(canvasForMarker.transform, false);
+				markerGameObject.transform.localPosition = Vector3.zero;
+				markerGameObject.SetActive(false);
+				var marker = markerGameObject.AddComponent<Image>();
+				marker.raycastTarget = false;
+				marker.sprite = markerSprite;
+				marker.SetNativeSize();
+				marker.rectTransform.anchorMin = marker.rectTransform.anchorMax = Vector2.zero;
+				_markers[i] = marker;
+			}
 		}
 
 		/// <remarks>
@@ -142,7 +187,25 @@ namespace UnityAutoTap
 		/// </summary>
 		public virtual void Dispose()
 		{
-			throw new NotImplementedException();
+			if (Current == this)
+			{
+				Stop();
+			}
+
+			Unsubscribe();
+			_session?.Dispose();
+			_session = null;
+			if (_ownsInput)
+			{
+				_input = null;
+			}
+
+			DestroyMarkers();
+			_slots = null;
+			_operations.Clear();
+			_fingerOperations.Clear();
+			_tail.Clear();
+			_log.Clear();
 		}
 
 		/// <summary>
@@ -152,7 +215,32 @@ namespace UnityAutoTap
 		/// <exception cref="InvalidOperationException">Another instance is the current one.</exception>
 		public void Start()
 		{
-			throw new NotImplementedException();
+			if (Current != null)
+			{
+				if (Current == this)
+				{
+					return;
+				}
+
+				throw new InvalidOperationException("Another instance is started.");
+			}
+
+			if (_slots == null)
+			{
+				throw new InvalidOperationException("Setup has to be called before Start.");
+			}
+
+			if (_ownsInput)
+			{
+				// Throws if the Input System cannot be driven by virtual input; nothing was changed yet.
+				_session = VirtualInput.Acquire();
+				_input = _session;
+			}
+
+			Subscribe();
+			Enabled = true;
+			Current = this;
+			OnStart();
 		}
 
 		/// <summary>
@@ -179,7 +267,42 @@ namespace UnityAutoTap
 		/// <exception cref="InvalidOperationException">This instance is not the current one.</exception>
 		public void Stop()
 		{
-			throw new NotImplementedException();
+			if (Current != this)
+			{
+				throw new InvalidOperationException("This instance is not the current one.");
+			}
+
+			Current = null;
+			Enabled = false;
+
+			// What ended already but was not reported yet is reported first, in the order it ended.
+			NotifyCompleted(true);
+
+			_scratch.Clear();
+			_scratch.AddRange(_operations);
+			_scratch.Sort((a, b) => a.FireSequence.CompareTo(b.FireSequence));
+			var frame = Time.frameCount;
+			foreach (var operation in _scratch)
+			{
+				operation.Interrupt();
+				Complete(operation, EndReason.Interrupted, null, frame);
+				_tail.Add(new KeyValuePair<long, LogItem>(operation.FireSequence, operation.Item));
+				_slots[operation.Index] = null;
+				operation.Notified = true;
+				OnTapCompleted(operation.Index, operation.Item);
+			}
+
+			_scratch.Clear();
+			_operations.Clear();
+			_fingerOperations.Clear();
+			HideMarkers();
+			OnStop();
+
+			if (_session != null)
+			{
+				_session.Dispose();
+				_session = null;
+			}
 		}
 
 		/// <summary>
@@ -226,7 +349,8 @@ namespace UnityAutoTap
 		/// The sequence is renewed at the start of each Dynamic input update, not at the start of
 		/// <see cref="Update(float)"/>. An operation is processed by the input update at the start of a frame, so it
 		/// can be read in <see cref="OnPreUpdate"/>, in <see cref="Update(int)"/>, in <see cref="OnPostUpdate"/> and
-		/// after <see cref="Update(float)"/> of that frame, until the next frame's input update.
+		/// after <see cref="Update(float)"/> of that frame, until the next frame's input update. A frame without an
+		/// input update has an empty sequence.
 		/// </para>
 		/// <para>
 		/// An operation fired in frame N is queued by <c>Fire</c> and processed by the input update of frame N + 1,
@@ -235,13 +359,28 @@ namespace UnityAutoTap
 		/// </para>
 		/// <para>
 		/// Elements are ordered by <see cref="LogEvent.Order"/>. Elements without an order come after those that
-		/// have one: <see cref="LogEventKind.Completed"/> of items that were dropped
-		/// (<see cref="EndReason.Dropped"/>) at the end of that input update, in the order the items were fired.
+		/// have one, in the order the items were fired. They are <see cref="LogEventKind.Completed"/> of
+		/// <list type="bullet">
+		/// <item><description>
+		/// items that were dropped (<see cref="EndReason.Dropped"/>) by that input update, and
+		/// </description></item>
+		/// <item><description>
+		/// items that <see cref="Stop"/> ended since the previous input update, which are put into the sequence of
+		/// the next input update because their release is processed by it.
+		/// </description></item>
+		/// </list>
+		/// </para>
+		/// <para>
+		/// The end of every <see cref="LogItem"/> that <c>Fire</c> returned is in exactly one sequence, once the
+		/// input updates it needs have run: the update that processes its release, or the next one after
+		/// <see cref="Stop"/>.
 		/// </para>
 		/// </remarks>
 		public IEnumerable<LogEvent> GetLatestLogs()
 		{
-			throw new NotImplementedException();
+			// There is one Dynamic input update per frame, so a sequence of an earlier frame is out of date even if
+			// no input update came to renew it (for example after the virtual input was removed).
+			return _logFrame == Time.frameCount ? _log.ToArray() : Array.Empty<LogEvent>();
 		}
 
 		/// <summary>
@@ -270,7 +409,42 @@ namespace UnityAutoTap
 		/// <param name="deltaTime">The time since the previous call, in seconds.</param>
 		public void Update(float deltaTime)
 		{
-			throw new NotImplementedException();
+			if (!Enabled)
+			{
+				return;
+			}
+
+			OnPreUpdate(deltaTime);
+			if (!Enabled)
+			{
+				return;
+			}
+
+			NotifyCompleted();
+			if (!Enabled)
+			{
+				return;
+			}
+
+			for (var i = 0; i < _slots.Length; ++i)
+			{
+				var operation = _slots[i];
+				if (operation != null)
+				{
+					Advance(operation, deltaTime);
+				}
+				else
+				{
+					Update(i);
+				}
+
+				if (!Enabled)
+				{
+					return;
+				}
+			}
+
+			OnPostUpdate(deltaTime);
 		}
 
 		/// <summary>
