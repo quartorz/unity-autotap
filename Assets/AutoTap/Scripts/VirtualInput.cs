@@ -100,7 +100,7 @@ namespace UnityAutoTap
 		/// <param name="layout">The layout of the device, for example <c>Keyboard</c> or <c>Gamepad</c>.</param>
 		/// <param name="number">Tells apart several devices of the same layout.</param>
 		/// <returns>The same instance for the same (layout, number) pair.</returns>
-		/// <exception cref="ArgumentException">The layout is derived from <see cref="Pointer"/>.</exception>
+		/// <exception cref="ArgumentException">There is no such layout, or it is derived from <see cref="Pointer"/>.</exception>
 		VirtualDevice GetDevice(string layout, int number = 0);
 
 		/// <summary>
@@ -146,7 +146,7 @@ namespace UnityAutoTap
 		public VirtualDevice GetDevice(string layout, int number = 0)
 		{
 			ThrowIfDisposed();
-			throw new NotImplementedException();
+			return _core.GetDevice(layout, number);
 		}
 
 		/// <inheritdoc/>

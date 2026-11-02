@@ -371,6 +371,97 @@ namespace UnityAutoTap
 			}
 		}
 
+		/// <summary>
+		/// One operation of a device that has no position: what <see cref="FireDevice"/> starts.
+		/// </summary>
+		sealed class DeviceOperation : DeviceBoundOperation, ISequenceTarget
+		{
+			readonly List<ButtonControl> _pressed = new List<ButtonControl>();
+			readonly Dictionary<ControlSequence.Step, ButtonControl> _buttons;
+
+			public DeviceOperation(
+				LogItem item, long fireSequence, VirtualDevice device, ControlSequence sequence,
+				Dictionary<ControlSequence.Step, ButtonControl> buttons)
+				: base(item, fireSequence, device)
+			{
+				_buttons = buttons;
+				Runner = new SequenceRunner(sequence, this);
+			}
+
+			public SequenceRunner Runner { get; }
+
+			public override PointerPrediction Prediction => null;
+
+			public override bool RunnerDone => Runner.Done;
+			public override EndReason RunnerReason => Runner.Reason;
+			public override bool PressedInLastAdvance => Runner.PressedInLastAdvance;
+
+			public override void AdvanceRunner(float deltaTime)
+			{
+				Runner.Advance(deltaTime);
+			}
+
+			/// <summary>
+			/// Queues the event of the first step, if that step takes no time.
+			/// </summary>
+			public void QueueFirstStep()
+			{
+				Runner.RunFirst();
+			}
+
+			public object ReadControl(string path)
+			{
+				return Device.ReadControl(Device.FindControl(path));
+			}
+
+			public void SetControl(string path, object value)
+			{
+				Device.Queue(ControlValue.OfObject(path, value));
+				NoteQueued();
+			}
+
+			public void Press(ControlSequence.Step step)
+			{
+				var button = _buttons[step];
+				Device.QueueEvent(new InputControl[] { button }, new object[] { 1f }, reset: false);
+				NoteQueued();
+				if (!_pressed.Contains(button))
+				{
+					_pressed.Add(button);
+				}
+			}
+
+			public void Release(ControlSequence.Step step)
+			{
+				var button = _buttons[step];
+				Device.QueueEvent(new InputControl[] { button }, new object[] { 0f }, reset: false);
+				NoteQueued();
+				_pressed.Remove(button);
+			}
+
+			public void Text(string text)
+			{
+				Queued(Device.QueueText(text));
+			}
+
+			public void Composition(string text)
+			{
+				Queued(Device.QueueComposition(text));
+			}
+
+			public override void QueueEnd()
+			{
+				for (var i = _pressed.Count - 1; i >= 0; --i)
+				{
+					Device.QueueEvent(new InputControl[] { _pressed[i] }, new object[] { 0f }, reset: false);
+					NoteQueued();
+				}
+
+				_pressed.Clear();
+				Queued(Device.QueueResetIfNeeded());
+			}
+		}
+
 		void Subscribe()
 		{
 			if (_subscribedTo == _input)

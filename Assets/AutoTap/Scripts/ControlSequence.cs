@@ -24,6 +24,12 @@ namespace UnityAutoTap
 	/// <see cref="AutoTapBase.FirePointer"/>.
 	/// </para>
 	/// <para>
+	/// Every step that writes is an event of its own, even when several steps fall into one frame, so the order of the
+	/// steps is the order in which the Input System processes them (which a shortcut such as Ctrl+R depends on). A
+	/// control is never pressed and released by the same input update: a release that follows a press with no time in
+	/// between is made in the next frame.
+	/// </para>
+	/// <para>
 	/// A sequence must not be modified after it was passed to a <c>Fire</c> method.
 	/// </para>
 	/// </remarks>
@@ -56,6 +62,29 @@ namespace UnityAutoTap
 		}
 
 		internal readonly List<Step> Steps = new List<Step>();
+
+		/// <summary>
+		/// Checks that the sequence writes something, which a sequence of waiting steps only does not.
+		/// </summary>
+		/// <exception cref="ArgumentException">The sequence has no step that writes.</exception>
+		internal void RequireWrites()
+		{
+			foreach (var step in Steps)
+			{
+				switch (step.Kind)
+				{
+					case StepKind.Press:
+					case StepKind.Release:
+					case StepKind.Set:
+					case StepKind.Text:
+					case StepKind.Composition:
+						return;
+				}
+			}
+
+			throw new ArgumentException(
+				"The sequence writes nothing: it needs a Press, Release, Set, Text or Composition step.", nameof(Steps));
+		}
 
 		static void RequireSeconds(float seconds)
 		{

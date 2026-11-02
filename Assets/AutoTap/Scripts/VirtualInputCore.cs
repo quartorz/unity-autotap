@@ -361,7 +361,39 @@ namespace UnityAutoTap
 
 		public VirtualDevice GetDevice(string layout, int number)
 		{
-			throw new NotImplementedException();
+			if (_tornDown)
+			{
+				throw new ObjectDisposedException(nameof(VirtualInput));
+			}
+
+			if (string.IsNullOrEmpty(layout))
+			{
+				throw new ArgumentException("The layout is empty.", nameof(layout));
+			}
+
+			if (_virtualDevices.TryGetValue(KeyOf(layout, number), out var existing))
+			{
+				if (!(existing is VirtualPointer))
+				{
+					return existing;
+				}
+
+				throw new ArgumentException(
+					$"The layout '{layout}' is a pointer. Use GetPointer for pointers.", nameof(layout));
+			}
+
+			var device = AddDevice(layout, number);
+			if (device is Pointer)
+			{
+				InputSystem.RemoveDevice(device);
+				throw new ArgumentException(
+					$"The layout '{layout}' is derived from Pointer. Use GetPointer for pointers, and NewFinger for a touchscreen.",
+					nameof(layout));
+			}
+
+			var created = new VirtualDevice(this, device);
+			Register(KeyOf(layout, number), created);
+			return created;
 		}
 
 		static InputDevice AddDevice(string layout, int number)

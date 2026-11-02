@@ -205,6 +205,20 @@ namespace UnityAutoTap
 		/// Operates a device that has no position (a keyboard, a gamepad, a joystick, a sensor, a custom layout) as
 		/// planned by <paramref name="sequence"/>.
 		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// The device is added to the Input System by the first call that names it, even if the call returns
+		/// <c>null</c> for another reason.
+		/// </para>
+		/// <para>
+		/// The first step is queued by this method if it takes no time (a press, a release, text, or a value that is
+		/// set at once); the others follow in the next frames, once the first one was processed. A sequence that begins
+		/// with a step that waits, or that changes a value gradually, queues nothing yet; it is processed once its
+		/// first step is over. When the sequence ends, whatever it still holds pressed is released, in the opposite
+		/// order, and the controls that are not marked <c>dontReset</c> go back to their defaults. The controls of a
+		/// sensor are noisy, which makes them <c>dontReset</c>, so a sensor keeps the value that was set.
+		/// </para>
+		/// </remarks>
 		/// <param name="layout">The layout of the device, not derived from <see cref="Pointer"/>.</param>
 		/// <param name="sequence">The plan.</param>
 		/// <param name="number">Tells apart several devices of the same layout.</param>
@@ -217,7 +231,7 @@ namespace UnityAutoTap
 		/// </exception>
 		protected internal LogItem FireDevice(string layout, ControlSequence sequence, int number = 0)
 		{
-			throw new NotImplementedException();
+			return FireDeviceSequence(layout, sequence, number, float.NaN);
 		}
 
 		/// <summary>
@@ -293,7 +307,47 @@ namespace UnityAutoTap
 				}
 			}
 
-			return FireDevice("Keyboard", sequence);
+			return FireDeviceSequence("Keyboard", sequence, 0, duration);
+		}
+
+		LogItem FireDeviceSequence(string layout, ControlSequence sequence, int number, float duration)
+		{
+			if (_slots == null)
+			{
+				throw new InvalidOperationException("Setup has to be called before Fire.");
+			}
+
+			if (sequence == null)
+			{
+				throw new ArgumentNullException(nameof(sequence));
+			}
+
+			if (string.IsNullOrEmpty(layout))
+			{
+				throw new ArgumentException("The layout is empty.", nameof(layout));
+			}
+
+			sequence.RequireWrites();
+			if (!Enabled)
+			{
+				return null;
+			}
+
+			var device = _input.GetDevice(layout, number);
+			var buttons = device.ResolveSequence(sequence);
+			if (_deviceOperations.ContainsKey(device.Device))
+			{
+				return null;
+			}
+
+			var item = NewLogItem(-1) ?? new LogItem();
+			FillItem(item, -1, LogItemKind.Device, device.Device, Vector2.zero, null, duration, null, null, null, sequence);
+
+			var operation = new DeviceOperation(item, ++_fireSequence, device, sequence, buttons);
+			operation.QueueFirstStep();
+			_operations.Add(operation);
+			_deviceOperations.Add(device.Device, operation);
+			return item;
 		}
 
 		static bool IsOutsideScreen(Vector2 point)

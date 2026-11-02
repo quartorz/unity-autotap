@@ -323,6 +323,12 @@ namespace UnityAutoTap
 				case Vector3 a:
 					return Vector3.LerpUnclamped(a, (Vector3)to, t);
 				case Quaternion a:
+					// The state of a rotation that nothing was written to is four zeros, which is no rotation.
+					if (a.x == 0f && a.y == 0f && a.z == 0f && a.w == 0f)
+					{
+						a = Quaternion.identity;
+					}
+
 					return Quaternion.SlerpUnclamped(a, (Quaternion)to, t);
 				default:
 					return t >= 1f ? to : from;

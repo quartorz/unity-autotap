@@ -172,9 +172,15 @@ namespace UnityAutoTap
 		/// <see cref="InvalidOperationException"/>.
 		/// </remarks>
 		/// <param name="text">The characters to enter.</param>
+		/// <exception cref="InvalidOperationException">The device does not receive text.</exception>
 		public void Text(string text)
 		{
-			throw new NotImplementedException();
+			if (text == null)
+			{
+				throw new ArgumentNullException(nameof(text));
+			}
+
+			QueueText(text);
 		}
 
 		/// <summary>
@@ -184,12 +190,20 @@ namespace UnityAutoTap
 		/// <remarks>
 		/// Only devices that implement <see cref="UnityEngine.InputSystem.LowLevel.ITextInputReceiver"/> support this
 		/// (at present, only <see cref="Keyboard"/>). Calling it on another device throws
-		/// <see cref="InvalidOperationException"/>.
+		/// <see cref="InvalidOperationException"/>. A composition has at most 63 characters, which is what an event
+		/// holds.
 		/// </remarks>
 		/// <param name="text">The text being composed.</param>
+		/// <exception cref="InvalidOperationException">The device does not receive text.</exception>
+		/// <exception cref="ArgumentException"><paramref name="text"/> is longer than 63 characters.</exception>
 		public void Composition(string text)
 		{
-			throw new NotImplementedException();
+			if (text == null)
+			{
+				throw new ArgumentNullException(nameof(text));
+			}
+
+			QueueComposition(text);
 		}
 
 		/// <summary>
@@ -428,6 +442,180 @@ namespace UnityAutoTap
 			InputSystem.QueueEvent(eventPtr);
 			_lastQueuedStamp = _core.EndedUpdates;
 			return _lastQueuedStamp;
+		}
+
+		/// <summary>
+		/// <c>true</c> if the device receives text.
+		/// </summary>
+		internal bool ReceivesText => _device is ITextInputReceiver;
+
+		/// <summary>
+		/// The longest composition that an event holds.
+		/// </summary>
+		internal const int MaxCompositionLength = 63;
+
+		/// <summary>
+		/// Queues one text event per character.
+		/// </summary>
+		/// <returns>The stamp of the last event, or -1 if the text is empty.</returns>
+		/// <exception cref="InvalidOperationException">The device does not receive text.</exception>
+		internal long QueueText(string text)
+		{
+			RequireTextReceiver();
+			var stamp = -1L;
+			var i = 0;
+			while (i < text.Length)
+			{
+				int codePoint;
+				if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+				{
+					codePoint = char.ConvertToUtf32(text[i], text[i + 1]);
+					i += 2;
+				}
+				else
+				{
+					codePoint = text[i];
+					++i;
+				}
+
+				var textEvent = TextEvent.Create(_device.deviceId, codePoint);
+				InputSystem.QueueEvent(ref textEvent);
+				_lastQueuedStamp = stamp = _core.EndedUpdates;
+			}
+
+			return stamp;
+		}
+
+		/// <summary>
+		/// Queues the event that sets the text being composed.
+		/// </summary>
+		/// <returns>The stamp of the event.</returns>
+		/// <exception cref="InvalidOperationException">The device does not receive text.</exception>
+		/// <exception cref="ArgumentException">The text is too long.</exception>
+		internal long QueueComposition(string text)
+		{
+			RequireTextReceiver();
+			if (text.Length > MaxCompositionLength)
+			{
+				throw new ArgumentException(
+					$"A composition has at most {MaxCompositionLength} characters, not {text.Length}.", nameof(text));
+			}
+
+			var compositionEvent = IMECompositionEvent.Create(_device.deviceId, text, -1);
+			InputSystem.QueueEvent(ref compositionEvent);
+			_lastQueuedStamp = _core.EndedUpdates;
+			return _lastQueuedStamp;
+		}
+
+		void RequireTextReceiver()
+		{
+			if (!(_device is ITextInputReceiver))
+			{
+				throw new InvalidOperationException(
+					$"The device '{_device.name}' (layout '{_device.layout}') does not receive text. Only a keyboard does.");
+			}
+
+			if (!_device.added)
+			{
+				throw new InvalidOperationException($"The device '{_device.name}' is not part of the Input System any more.");
+			}
+		}
+
+		/// <summary>
+		/// Finds the control of every step that presses or releases, and checks the other steps against the device.
+		/// </summary>
+		/// <returns>The control of each press and release step.</returns>
+		/// <exception cref="ArgumentException">A step does not fit the device.</exception>
+		internal Dictionary<ControlSequence.Step, ButtonControl> ResolveSequence(ControlSequence sequence)
+		{
+			var buttons = new Dictionary<ControlSequence.Step, ButtonControl>();
+			foreach (var step in sequence.Steps)
+			{
+				switch (step.Kind)
+				{
+					case ControlSequence.StepKind.Press:
+					case ControlSequence.StepKind.Release:
+						buttons[step] = ResolveStepButton(step.Control);
+						break;
+					case ControlSequence.StepKind.Set:
+					{
+						var control = ResolveForWrite((string)step.Control, step.ValueType);
+						Interpolation.ConvertTo(step.Value, control.valueType);
+						break;
+					}
+					case ControlSequence.StepKind.Text:
+					case ControlSequence.StepKind.Composition:
+						if (!ReceivesText)
+						{
+							throw new ArgumentException(
+								$"The device '{_device.name}' (layout '{_device.layout}') does not receive text. Only a keyboard does.");
+						}
+
+						if (step.Kind == ControlSequence.StepKind.Composition && step.Text.Length > MaxCompositionLength)
+						{
+							throw new ArgumentException(
+								$"A composition has at most {MaxCompositionLength} characters, not {step.Text.Length}.");
+						}
+
+						break;
+				}
+			}
+
+			return buttons;
+		}
+
+		ButtonControl ResolveStepButton(object control)
+		{
+			switch (control)
+			{
+				case string path:
+				{
+					var found = FindControl(path);
+					if (!(found is ButtonControl button))
+					{
+						throw new ArgumentException($"The control '{path}' of '{_device.name}' is not a button.");
+					}
+
+					CheckWritable(button);
+					return button;
+				}
+				case Key key:
+				{
+					if (!(_device is Keyboard keyboard))
+					{
+						throw new ArgumentException(
+							$"The key {key} needs a keyboard, but '{_device.name}' has the layout '{_device.layout}'.");
+					}
+
+					try
+					{
+						return keyboard[key];
+					}
+					catch (ArgumentOutOfRangeException)
+					{
+						throw new ArgumentException($"{key} is not a key that a keyboard has.");
+					}
+				}
+				case GamepadButton gamepadButton:
+				{
+					if (!(_device is Gamepad gamepad))
+					{
+						throw new ArgumentException(
+							$"The button {gamepadButton} needs a gamepad, but '{_device.name}' has the layout '{_device.layout}'.");
+					}
+
+					try
+					{
+						return gamepad[gamepadButton];
+					}
+					catch (System.ComponentModel.InvalidEnumArgumentException)
+					{
+						throw new ArgumentException($"{gamepadButton} is not a button that a gamepad has.");
+					}
+				}
+				default:
+					throw new ArgumentException($"A control of type {control?.GetType().Name} cannot be pressed.");
+			}
 		}
 
 		/// <summary>

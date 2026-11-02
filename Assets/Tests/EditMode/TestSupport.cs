@@ -65,6 +65,28 @@ namespace UnityAutoTap.Tests
 			return FireScroll(position, delta);
 		}
 
+		public LogItem Device(string layout, ControlSequence sequence, int number = 0)
+		{
+			return FireDevice(layout, sequence, number);
+		}
+
+		public LogItem Gamepad(ControlSequence sequence, int number = 0)
+		{
+			return FireGamepad(sequence, number);
+		}
+
+		public LogItem Key(Key key, float duration = 0f, params Key[] modifiers)
+		{
+			return FireKey(key, duration, modifiers);
+		}
+
+		public Action<float> PreUpdate;
+
+		protected override void OnPreUpdate(float deltaTime)
+		{
+			PreUpdate?.Invoke(deltaTime);
+		}
+
 		protected override void OnTapCompleted(int index, LogItem logItem)
 		{
 			Calls.Add($"completed {index}");
@@ -187,7 +209,8 @@ namespace UnityAutoTap.Tests
 	/// </summary>
 	sealed class Recorder : MonoBehaviour,
 		IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler,
-		IBeginDragHandler, IDragHandler, IEndDragHandler, IDropHandler, IScrollHandler
+		IBeginDragHandler, IDragHandler, IEndDragHandler, IDropHandler, IScrollHandler,
+		ISubmitHandler, ICancelHandler, IMoveHandler, ISelectHandler, IDeselectHandler
 	{
 		public List<UiEvent> Events;
 
@@ -214,6 +237,21 @@ namespace UnityAutoTap.Tests
 		public void OnEndDrag(PointerEventData eventData) => Record("endDrag", eventData);
 		public void OnDrop(PointerEventData eventData) => Record("drop", eventData);
 		public void OnScroll(PointerEventData eventData) => Record("scroll", eventData);
+
+		void RecordNavigation(string kind)
+		{
+			Events?.Add(new UiEvent { Name = name, Kind = kind });
+		}
+
+		public void OnSubmit(BaseEventData eventData) => RecordNavigation("submit");
+		public void OnCancel(BaseEventData eventData) => RecordNavigation("cancel");
+		public void OnSelect(BaseEventData eventData) => RecordNavigation("select");
+		public void OnDeselect(BaseEventData eventData) => RecordNavigation("deselect");
+
+		public void OnMove(AxisEventData eventData)
+		{
+			Events?.Add(new UiEvent { Name = name, Kind = $"move {eventData.moveDir}" });
+		}
 	}
 
 	/// <summary>
