@@ -9,10 +9,10 @@ namespace UnityAutoTap
 {
 	/// <remarks>
 	/// <para>
-	/// The <c>Fire</c> methods queue the first step of an operation and return its <see cref="LogItem"/> at once.
-	/// The operation is processed by the input update of the next frame (see <see cref="GetLatestLogs"/>), and
-	/// <see cref="Update(float)"/> queues the following steps. A <see cref="LogItem"/> that was returned ends exactly
-	/// once.
+	/// The <c>Fire</c> methods queue the steps at the start of an operation that take no time, and return its
+	/// <see cref="LogItem"/> at once. The operation is processed by the input update of the next frame (see
+	/// <see cref="GetLatestLogs"/>), and <see cref="Update(float)"/> queues the steps that follow once those were
+	/// processed. A <see cref="LogItem"/> that was returned ends exactly once.
 	/// </para>
 	/// <para>
 	/// The common rules of all <c>Fire</c> methods:
@@ -34,6 +34,12 @@ namespace UnityAutoTap
 	/// <item><description>
 	/// An operation outside the slots has <see cref="LogItem.Index"/> -1; <see cref="LogItem.Device"/> tells which
 	/// device it operates.
+	/// </description></item>
+	/// <item><description>
+	/// The steps at the start of the plan that take no time are queued by <c>Fire</c> itself, in the order of the
+	/// plan and each as an event of its own, by the same rule by which <see cref="Update(float)"/> queues the steps
+	/// of a frame: a step that takes no time is queued in the frame of <c>Fire</c> as long as no step before it took
+	/// time, whether or not it is the first step.
 	/// </description></item>
 	/// <item><description>
 	/// An operation never presses and releases in the same input update, even if its plan has no time between the
@@ -104,6 +110,11 @@ namespace UnityAutoTap
 		/// <c>null</c> for another reason. Its position stays where the gesture left it, so the UI under it stays
 		/// hovered; the buttons and the other controls that are not marked <c>dontReset</c> go back to their
 		/// defaults when the gesture ends.
+		/// </para>
+		/// <para>
+		/// The first step and the steps after it that take no time are queued by this method, as events of their own
+		/// (see <see cref="Gesture"/>), so one input update processes them: hovering, writing a control and pressing
+		/// a button in a row reach the Input System together, in that order.
 		/// </para>
 		/// <para>
 		/// The <see cref="LogItem"/> follows the first button that the gesture presses if the UI handles that button
@@ -194,10 +205,10 @@ namespace UnityAutoTap
 				}
 			};
 
-			operation.QueueFirstStep(plan);
-			ShowPointerMarker(pointer, plan.Start);
 			_operations.Add(operation);
 			_deviceOperations.Add(pointer.Device, operation);
+			operation.QueueInitialSteps(plan);
+			ShowPointerMarker(pointer, operation.Position);
 			return item;
 		}
 
@@ -211,12 +222,14 @@ namespace UnityAutoTap
 		/// <c>null</c> for another reason.
 		/// </para>
 		/// <para>
-		/// The first step is queued by this method if it takes no time (a press, a release, text, or a value that is
-		/// set at once); the others follow in the next frames, once the first one was processed. A sequence that begins
-		/// with a step that waits, or that changes a value gradually, queues nothing yet; it is processed once its
-		/// first step is over. When the sequence ends, whatever it still holds pressed is released, in the opposite
-		/// order, and the controls that are not marked <c>dontReset</c> go back to their defaults. The controls of a
-		/// sensor are noisy, which makes them <c>dontReset</c>, so a sensor keeps the value that was set.
+		/// This method queues the steps at the start of the sequence that take no time (a press, a release, text, a
+		/// composition, a value that is set at once, a hold of no time), each as an event of its own and in the order
+		/// of the sequence; the others follow in the next frames, once those were processed. A sequence that begins
+		/// with a step that waits, or that changes a value gradually, queues nothing yet; it is carried on once that
+		/// step is over. A release that follows a press of the same frame waits for the next one. When the sequence
+		/// ends, whatever it still holds pressed is released, in the opposite order, and the controls that are not
+		/// marked <c>dontReset</c> go back to their defaults. The controls of a sensor are noisy, which makes them
+		/// <c>dontReset</c>, so a sensor keeps the value that was set.
 		/// </para>
 		/// </remarks>
 		/// <param name="layout">The layout of the device, not derived from <see cref="Pointer"/>.</param>
@@ -258,7 +271,8 @@ namespace UnityAutoTap
 
 		/// <summary>
 		/// Scrolls the virtual mouse at <paramref name="screenPosition"/>. It is
-		/// <c>FireMouse(Gesture.HoverAt(screenPosition).Scroll(delta))</c>.
+		/// <c>FireMouse(Gesture.HoverAt(screenPosition).Scroll(delta))</c>: the hover and the scroll are two events of
+		/// the same input update, which is enough for the input module to enter the UI under the mouse and scroll it.
 		/// </summary>
 		/// <param name="screenPosition">The position in screen pixels. The UI there receives the scroll.</param>
 		/// <param name="delta">The amount, in the unit of the <c>scroll</c> control of the mouse.</param>
@@ -344,9 +358,9 @@ namespace UnityAutoTap
 			FillItem(item, -1, LogItemKind.Device, device.Device, Vector2.zero, null, duration, null, null, null, sequence);
 
 			var operation = new DeviceOperation(item, ++_fireSequence, device, sequence, buttons);
-			operation.QueueFirstStep();
 			_operations.Add(operation);
 			_deviceOperations.Add(device.Device, operation);
+			operation.QueueInitialSteps();
 			return item;
 		}
 
@@ -453,10 +467,11 @@ namespace UnityAutoTap
 			};
 
 			finger.Press(plan.Start);
-			ShowMarker(index, plan.Start);
 			_slots[index] = operation;
 			_operations.Add(operation);
 			_fingerOperations.Add(finger.TouchId, operation);
+			operation.Runner.AdvanceAfterFirstStep(true);
+			ShowMarker(index, finger.Position);
 			return item;
 		}
 

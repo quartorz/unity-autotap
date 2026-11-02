@@ -54,6 +54,10 @@ namespace UnityAutoTap
 	/// and is followed at once by the next step, in the same <see cref="Advance"/>. The time that a step does not
 	/// use is passed on to the next one.
 	/// </para>
+	/// <para>
+	/// <see cref="AdvanceAfterFirstStep"/> carries out the steps that take no time and come right after the first
+	/// step, which the caller queued itself, by the same rule and in the frame of the first step.
+	/// </para>
 	/// </remarks>
 	internal sealed class GestureRunner
 	{
@@ -88,8 +92,9 @@ namespace UnityAutoTap
 		public AutoTapBase.EndReason Reason { get; private set; } = AutoTapBase.EndReason.Finished;
 
 		/// <summary>
-		/// <c>true</c> if the last <see cref="Advance"/> pressed a button. What is pressed is not released in the same
-		/// input update, so the caller waits for the next frame before it ends the operation.
+		/// <c>true</c> if the last <see cref="Advance"/> or <see cref="AdvanceAfterFirstStep"/> pressed a button, or
+		/// the first step did. What is pressed is not released in the same input update, so the caller waits for the
+		/// next frame before it ends the operation.
 		/// </summary>
 		public bool PressedInLastAdvance { get; private set; }
 
@@ -109,6 +114,16 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
+		/// Carries out the steps that take no time and come right after the first step, which the caller queued in
+		/// the same frame. A step that takes time is left to <see cref="Advance"/>.
+		/// </summary>
+		/// <param name="firstStepPressed"><c>true</c> if the first step pressed a button.</param>
+		public void AdvanceAfterFirstStep(bool firstStepPressed)
+		{
+			Run(0f, firstStepPressed);
+		}
+
+		/// <summary>
 		/// Carries out the steps for one frame.
 		/// </summary>
 		/// <remarks>
@@ -118,7 +133,12 @@ namespace UnityAutoTap
 		/// <param name="deltaTime">The time since the previous call, in seconds.</param>
 		public void Advance(float deltaTime)
 		{
-			PressedInLastAdvance = false;
+			Run(deltaTime, false);
+		}
+
+		void Run(float deltaTime, bool pressedBefore)
+		{
+			PressedInLastAdvance = pressedBefore;
 			var remaining = Mathf.Max(0f, deltaTime);
 			while (!Done)
 			{

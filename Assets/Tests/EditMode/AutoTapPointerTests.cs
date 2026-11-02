@@ -330,10 +330,9 @@ namespace UnityAutoTap.Tests
 				Gesture.HoverAt(TestScene.At(0.2f, 0.2f)).Set("tilt", new Vector2(0.5f, -0.25f)).Press("barrel1").Press("eraser").Hold(0.04f));
 
 			Frame();
-			Frame();
 			var pen = Pen.current;
 
-			Assert.That(pen.tilt.ReadValue(), Is.EqualTo(new Vector2(0.5f, -0.25f)));
+			Assert.That(pen.tilt.ReadValue(), Is.EqualTo(new Vector2(0.5f, -0.25f)), "the steps that take no time are processed together");
 			Assert.That(pen.firstBarrelButton.isPressed, Is.True);
 			Assert.That(pen.eraser.isPressed, Is.True);
 			Assert.That(pen.tip.isPressed, Is.False);
@@ -341,6 +340,27 @@ namespace UnityAutoTap.Tests
 			Assert.That(pen.firstBarrelButton.isPressed, Is.False);
 			Assert.That(pen.eraser.isPressed, Is.False);
 			Assert.That(pen.tilt.ReadValue(), Is.EqualTo(Vector2.zero));
+		}
+
+		[Test]
+		public void FireQueuesEveryStepAtTheStartThatTakesNoTimeAndKeepsAReleaseForTheNextInputUpdate()
+		{
+			var p = TestScene.At(0.5f, 0.5f);
+
+			var item = _autoTap.Mouse(Gesture.HoverAt(p).Press("rightButton").Release("rightButton").Press().Release());
+			Assert.That(_changes, Is.Empty, "Fire processes nothing");
+			RunUntilCompleted(item);
+
+			var buttons = _changes.OfType<ControlChange>().Where(c => c is ButtonDown || c is ButtonUp).ToList();
+			Assert.That(
+				buttons.Select(c => $"{c.GetType().Name} {c.ControlPath}"),
+				Is.EqualTo(new[] { "ButtonDown rightButton", "ButtonUp rightButton", "ButtonDown leftButton", "ButtonUp leftButton" }));
+			var position = _changes.OfType<ValueChanged>().First(c => c.ControlPath == "position");
+			Assert.That(position.UpdateCount, Is.EqualTo(buttons[0].UpdateCount), "the hover and the first press are in the update of the first frame");
+			Assert.That(buttons[0].UpdateCount, Is.LessThan(buttons[1].UpdateCount));
+			Assert.That(buttons[1].UpdateCount, Is.EqualTo(buttons[2].UpdateCount), "the release goes with the next press, in that order");
+			Assert.That(buttons[2].UpdateCount, Is.LessThan(buttons[3].UpdateCount));
+			Assert.That(item.EndReason, Is.EqualTo(AutoTapBase.EndReason.Finished));
 		}
 
 		[Test]
@@ -361,9 +381,7 @@ namespace UnityAutoTap.Tests
 		{
 			var item = _autoTap.Scroll(TestScene.At(0.5f, 0.5f), new Vector2(0, -120));
 
-			Frame(); // the hover is processed; the scroll is queued
-			Assert.That(_changes.OfType<Scrolled>(), Is.Empty);
-			Frame();
+			Frame(); // the hover and the scroll are two events of the same input update
 			var scrolled = _changes.OfType<Scrolled>().Single();
 			Assert.That(scrolled.Delta, Is.EqualTo(new Vector2(0, -120)));
 			Assert.That(Mouse.current.scroll.ReadValue(), Is.EqualTo(new Vector2(0, -120)));
@@ -379,7 +397,6 @@ namespace UnityAutoTap.Tests
 		{
 			_autoTap.Mouse(Gesture.HoverAt(TestScene.At(0.5f, 0.5f)).Scroll(new Vector2(0, 120)).Scroll(new Vector2(0, 240)));
 
-			Frame();
 			Frame();
 
 			Assert.That(Mouse.current.scroll.ReadValue(), Is.EqualTo(new Vector2(0, 360)));
@@ -408,7 +425,6 @@ namespace UnityAutoTap.Tests
 			var p = TestScene.At(0.5f, 0.5f);
 			_autoTap.Mouse(Gesture.HoverAt(p).Scroll(new Vector2(0, 120)).MoveTo(p + new Vector2(10, 0), 0f));
 
-			Frame();
 			Frame();
 
 			Assert.That(Mouse.current.scroll.ReadValue(), Is.EqualTo(new Vector2(0, 120)), "the scroll of the first event is not copied into the second");

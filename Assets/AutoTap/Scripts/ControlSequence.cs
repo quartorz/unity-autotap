@@ -25,9 +25,10 @@ namespace UnityAutoTap
 	/// </para>
 	/// <para>
 	/// Every step that writes is an event of its own, even when several steps fall into one frame, so the order of the
-	/// steps is the order in which the Input System processes them (which a shortcut such as Ctrl+R depends on). A
-	/// control is never pressed and released by the same input update: a release that follows a press with no time in
-	/// between is made in the next frame.
+	/// steps is the order in which the Input System processes them (which a shortcut such as Ctrl+R depends on). The
+	/// steps at the start that take no time fall into the frame of <c>Fire</c>, which queues them. A control is never
+	/// pressed and released by the same input update: a release that follows a press with no time in between is made
+	/// in the next frame.
 	/// </para>
 	/// <para>
 	/// A sequence must not be modified after it was passed to a <c>Fire</c> method.

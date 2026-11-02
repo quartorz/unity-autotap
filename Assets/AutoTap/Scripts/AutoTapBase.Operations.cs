@@ -271,10 +271,11 @@ namespace UnityAutoTap
 			}
 
 			/// <summary>
-			/// Queues the event of the first step of the gesture: the pointer goes to the position, and the button is
-			/// pressed if the step presses one. A pen is in range from here on.
+			/// Queues the event of the first step of the gesture (the pointer goes to the position, and the button
+			/// is pressed if the step presses one; a pen is in range from here on), then the steps that follow and take
+			/// no time, each as an event of its own.
 			/// </summary>
-			public void QueueFirstStep(PointerPlan plan)
+			public void QueueInitialSteps(PointerPlan plan)
 			{
 				var controls = new List<InputControl> { Pointer.PositionControl };
 				var values = new List<object> { plan.Start };
@@ -294,6 +295,7 @@ namespace UnityAutoTap
 				}
 
 				Queued(Pointer.QueueEvent(controls.ToArray(), values.ToArray(), reset: false));
+				Runner.AdvanceAfterFirstStep(plan.StartsWithPress);
 			}
 
 			public void MoveTo(Vector2 position)
@@ -402,11 +404,11 @@ namespace UnityAutoTap
 			}
 
 			/// <summary>
-			/// Queues the event of the first step, if that step takes no time.
+			/// Queues the steps at the start of the sequence that take no time, each as an event of its own.
 			/// </summary>
-			public void QueueFirstStep()
+			public void QueueInitialSteps()
 			{
-				Runner.RunFirst();
+				Runner.Advance(0f);
 			}
 
 			public object ReadControl(string path)

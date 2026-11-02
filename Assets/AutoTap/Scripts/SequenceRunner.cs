@@ -49,6 +49,10 @@ namespace UnityAutoTap
 	/// <see cref="Advance"/>, a step that takes no time is followed at once by the next one, the time that a step does
 	/// not use is passed on, and a release that follows a press of the same call waits for the next call.
 	/// </para>
+	/// <para>
+	/// <c>Fire</c> calls <see cref="Advance"/> with no time, so that the steps at the start of the sequence that take
+	/// no time are queued in the frame of <c>Fire</c>.
+	/// </para>
 	/// </remarks>
 	internal sealed class SequenceRunner
 	{
@@ -82,39 +86,6 @@ namespace UnityAutoTap
 		/// <c>true</c> if the last <see cref="Advance"/> pressed a button.
 		/// </summary>
 		public bool PressedInLastAdvance { get; private set; }
-
-		/// <summary>
-		/// Carries out the first step if it takes no time (it writes at once), so that <c>Fire</c> can start the
-		/// operation with an event. A first step that waits or changes a value gradually is left to
-		/// <see cref="Advance"/>.
-		/// </summary>
-		public void RunFirst()
-		{
-			var step = _sequence.Steps[0];
-			switch (step.Kind)
-			{
-				case ControlSequence.StepKind.Press:
-					_target.Press(step);
-					PressedInLastAdvance = true;
-					break;
-				case ControlSequence.StepKind.Release:
-					_target.Release(step);
-					break;
-				case ControlSequence.StepKind.Set when step.Seconds <= 0:
-					SetAtOnce(step);
-					break;
-				case ControlSequence.StepKind.Text:
-					_target.Text(step.Text);
-					break;
-				case ControlSequence.StepKind.Composition:
-					_target.Composition(step.Text);
-					break;
-				default:
-					return;
-			}
-
-			Next();
-		}
 
 		/// <summary>
 		/// Carries out the steps for one frame.
@@ -242,13 +213,6 @@ namespace UnityAutoTap
 						throw new InvalidOperationException($"A step of kind {step.Kind} cannot be carried out.");
 				}
 			}
-		}
-
-		void SetAtOnce(ControlSequence.Step step)
-		{
-			var path = (string)step.Control;
-			var from = _target.ReadControl(path);
-			_target.SetControl(path, Interpolation.ConvertTo(step.Value, from.GetType()));
 		}
 
 		void Next()

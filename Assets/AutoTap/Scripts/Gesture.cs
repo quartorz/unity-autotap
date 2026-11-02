@@ -24,10 +24,12 @@ namespace UnityAutoTap
 	/// finger.
 	/// </para>
 	/// <para>
-	/// The first step is carried out by <c>Fire</c> and the others in the following frames, once the first step was
-	/// processed. A button is never pressed and released by the same input update: a release that follows a press with
-	/// no time in between is made in the next frame. A pen is in range from the first step until the end of the
-	/// gesture.
+	/// <c>Fire</c> carries out the first step and every step after it that takes no time, up to the first step that
+	/// takes time (a move or a change that takes seconds, a hold that has to wait). Each of them is an event of its own, queued in the
+	/// order of the plan, so one input update processes them all. The other steps are carried out in the following
+	/// frames, once the first step was processed. A button is never pressed and released by the same input update: a
+	/// release that follows a press with no time in between is made in the next frame. A pen is in range from the first
+	/// step until the end of the gesture.
 	/// </para>
 	/// <para>
 	/// A gesture must not be modified after it was passed to a <c>Fire</c> method.

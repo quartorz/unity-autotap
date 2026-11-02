@@ -411,6 +411,11 @@ namespace UnityAutoTap.Tests
 
 			var call = Rig.Log.First("scroll", scroll.gameObject);
 			Assert.That(call, Is.Not.Null, Rig.Log.ToString());
+			// The hover that puts the pointer over the ScrollRect and the scroll are two events of one input update, and
+			// the scroll needs no frame of waiting: the pointer enters the ScrollRect first and the scroll follows in the
+			// first frame after Fire, which is also the frame in which the mouse was added to the module.
+			Assert.That(call.Frame, Is.EqualTo(item.FrameCount + 1), Rig.Log.ToString());
+			Assert.That(Rig.Log.Trace(scroll.gameObject, "pointerEnter", "scroll"), Is.EqualTo(new[] { "pointerEnter@Scroll", "scroll@Scroll" }), Rig.Log.ToString());
 			Assert.That(call.ScrollDelta.y, Is.LessThan(0f), "the sign of the scroll is kept");
 			Assert.That(scroll.content.anchoredPosition.y - before,
 				Is.EqualTo(-call.ScrollDelta.y * scroll.scrollSensitivity).Within(0.01f));

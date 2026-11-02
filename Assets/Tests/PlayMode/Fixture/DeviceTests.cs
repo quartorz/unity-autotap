@@ -45,10 +45,10 @@ namespace UnityAutoTap.Tests
 			Assert.That(deviceChanges.Any(c => c.Device == joystick && c.Change == InputDeviceChange.Added), Is.True,
 				"onDeviceChange tells about the device that was added");
 
-			// Fire queues only the first step, so the stick is written first and the trigger is pressed by the step of
-			// the next frame.
+			// Fire queues both steps, as two events: the stick is written first and the trigger is pressed after it, and
+			// the same input update processes both.
 			yield return Until(() => item.Order.HasValue, "the first change to be processed");
-			yield return Until(() => joystick.trigger.isPressed, "the trigger to be pressed");
+			Assert.That(joystick.trigger.isPressed, Is.True, "the trigger was pressed by the input update that moved the stick");
 			Assert.That(Joystick.current, Is.SameAs(joystick));
 			Assert.That(Joystick.all, Does.Contain(joystick));
 			var stick = joystick.stick.ReadUnprocessedValue();
@@ -61,6 +61,11 @@ namespace UnityAutoTap.Tests
 			Assert.That(joystick.trigger.isPressed, Is.False);
 
 			Assert.That(all.At(joystick, "trigger").Select(c => c.Type), Is.EqualTo(new[] { typeof(ButtonDown), typeof(ButtonUp) }));
+			var firstStick = all.At(joystick, "stick").First(c => c.Is<ValueChanged>());
+			var triggerDown = all.At(joystick, "trigger").First(c => c.Is<ButtonDown>());
+			Assert.That(firstStick.Order, Is.LessThan(triggerDown.Order), "in the order of the plan");
+			Assert.That(firstStick.UpdateCount, Is.EqualTo(triggerDown.UpdateCount), "in one input update");
+			Assert.That(firstStick.EventId, Is.Not.EqualTo(triggerDown.EventId), "as two events");
 			// A control made only of axes is one unit for the reader, so the stick comes out as one Vector2 change.
 			var stickChanges = all.At(joystick, "stick").Where(c => c.Is<ValueChanged>()).ToList();
 			Assert.That(stickChanges, Is.Not.Empty, all.ToString());

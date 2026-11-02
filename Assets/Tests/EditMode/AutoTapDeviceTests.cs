@@ -175,6 +175,52 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
+		public void FireQueuesEveryStepAtTheStartThatTakesNoTimeAsAnEventOfItsOwn()
+		{
+			var item = _autoTap.Key(Key.R, 0.2f, Key.LeftCtrl, Key.LeftShift);
+
+			Assert.That(_changes, Is.Empty, "Fire processes nothing");
+			Frame();
+
+			Assert.That(
+				_changes.Select(c => ((ControlChange)c).ControlPath), Is.EqualTo(new[] { "leftCtrl", "leftShift", "r" }),
+				"in the order of the plan, although only the first step comes first");
+			Assert.That(_changes.Select(c => c.UpdateCount).Distinct().Count(), Is.EqualTo(1), "one input update processes them all");
+			Assert.That(_changes.Select(c => c.EventId).Distinct().Count(), Is.EqualTo(3), "each is an event of its own");
+			Assert.That(item.Completed, Is.False);
+		}
+
+		[Test]
+		public void AStepThatTakesNoTimeIsQueuedByFireWhereverItIsInTheSequence()
+		{
+			var item = _autoTap.Device(
+				"Gamepad", new ControlSequence().Hold(0f).Set("leftStick", Vector2.right).Press(GamepadButton.South).Hold(0.2f));
+
+			Frame();
+
+			Assert.That(_changes.Select(c => ((ControlChange)c).ControlPath), Is.EqualTo(new[] { "leftStick", "buttonSouth" }));
+			Assert.That(_changes.Select(c => c.UpdateCount).Distinct().Count(), Is.EqualTo(1));
+			Assert.That(item.Order, Is.EqualTo(_changes.First().Order));
+		}
+
+		[Test]
+		public void AReleaseThatFollowsAPressOfTheSameFrameWaitsForTheNextInputUpdate()
+		{
+			var item = _autoTap.Device(
+				"Keyboard", new ControlSequence().Press(Key.A).Release(Key.A).Press(Key.B).Release(Key.B));
+
+			RunUntilCompleted(item);
+
+			var changes = _changes.OfType<ControlChange>().ToList();
+			Assert.That(
+				changes.Select(c => $"{c.GetType().Name} {c.ControlPath}"),
+				Is.EqualTo(new[] { "ButtonDown a", "ButtonUp a", "ButtonDown b", "ButtonUp b" }));
+			Assert.That(changes[0].UpdateCount, Is.LessThan(changes[1].UpdateCount), "the key is down for one input update at least");
+			Assert.That(changes[1].UpdateCount, Is.EqualTo(changes[2].UpdateCount), "the release goes with the next press, in that order");
+			Assert.That(changes[2].UpdateCount, Is.LessThan(changes[3].UpdateCount));
+		}
+
+		[Test]
 		public void AModifierIsPressedLongBeforeTheKeyForOneModifierShortcuts()
 		{
 			InputSystem.settings.shortcutKeysConsumeInput = true;
@@ -397,7 +443,6 @@ namespace UnityAutoTap.Tests
 				new ControlSequence().Press(GamepadButton.South).Press("buttonWest").Set("leftStick", Vector2.one).Hold(0.04f));
 
 			Frame();
-			Frame();
 			Assert.That(Gamepad.current.buttonSouth.isPressed, Is.True);
 			Assert.That(Gamepad.current.buttonWest.isPressed, Is.True);
 			RunUntilCompleted(item);
@@ -429,8 +474,7 @@ namespace UnityAutoTap.Tests
 				"Joystick", new ControlSequence().Set("stick", new Vector2(0.5f, 0.5f)).Press("trigger").Hold(0.04f));
 
 			Frame();
-			Frame();
-			Assert.That(Joystick.current.trigger.isPressed, Is.True);
+			Assert.That(Joystick.current.trigger.isPressed, Is.True, "the trigger is pressed by the update that moved the stick");
 			Assert.That(Joystick.current.stick.ReadUnprocessedValue().x, Is.EqualTo(0.5f).Within(0.01f));
 			RunUntilCompleted(item);
 
@@ -473,7 +517,6 @@ namespace UnityAutoTap.Tests
 			var item = _autoTap.Device(
 				"Keyboard",
 				new ControlSequence().Press(Key.A).Composition("か").Text("a").Composition("").Hold(0.04f).Release(Key.A));
-			Frame();
 			Keyboard.current.onTextInput += c => typed.Add($"text {c}");
 			Keyboard.current.onIMECompositionChange += c => typed.Add($"composition {c}");
 			RunUntilCompleted(item);

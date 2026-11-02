@@ -255,10 +255,63 @@ namespace UnityAutoTap.Tests
 		{
 			_autoTap.Do(0, Gesture.PressAt(TestScene.At(0.5f, 0.5f)).Set("pressure", 0.2f).Hold(0.2f));
 
-			Frame(); // press processed; pressure queued
-			Frame();
+			Frame(); // the press and the pressure are processed by the same input update
 
 			Assert.That(Touchscreen.current.touches[0].pressure.ReadValue(), Is.EqualTo(0.2f).Within(0.0001f));
+		}
+
+		[Test]
+		public void TheStepsThatFollowThePressAndTakeNoTimeAreQueuedByFireAsEventsOfTheirOwn()
+		{
+			var p = TestScene.At(0.2f, 0.2f);
+			var q = TestScene.At(0.6f, 0.4f);
+
+			var item = _autoTap.Do(0, Gesture.PressAt(p).Set("pressure", 0.5f).MoveTo(q, 0f).Hold(0.2f));
+
+			Assert.That(item, Is.Not.Null);
+			Assert.That(_changes, Is.Empty, "Fire processes nothing");
+			Assert.That(item.DragTo, Is.EqualTo(q), "the move was carried out by Fire");
+			Frame();
+
+			Assert.That(_changes.Select(c => c.UpdateCount).Distinct().Count(), Is.EqualTo(1), "one input update processes them all");
+			Assert.That(_changes.First(), Is.TypeOf<TouchBegan>());
+			Assert.That(((TouchBegan)_changes.First()).Position, Is.EqualTo(p));
+			Assert.That(_changes.Skip(1), Is.All.TypeOf<TouchMoved>());
+			var last = (TouchMoved)_changes.Last();
+			Assert.That(last.Position, Is.EqualTo(q), "in the order of the plan");
+			Assert.That(Touchscreen.current.touches[0].pressure.ReadValue(), Is.EqualTo(0.5f).Within(0.0001f));
+			Assert.That(item.Order, Is.EqualTo(_changes.First().Order));
+			Assert.That(item.Completed, Is.False);
+		}
+
+		[Test]
+		public void AStepThatTakesTimeIsLeftToTheFramesAfterFire()
+		{
+			var p = TestScene.At(0.2f, 0.2f);
+			var q = TestScene.At(0.6f, 0.4f);
+			var item = _autoTap.Do(0, Gesture.PressAt(p).MoveTo(q, 0.1f));
+
+			Frame(); // the press is processed; the move starts with this frame's time
+			Assert.That(_changes.OfType<TouchMoved>(), Is.Empty);
+			Frame();
+
+			Assert.That(Vector2.Distance(_changes.OfType<TouchMoved>().First().Position, Vector2.Lerp(p, q, 0.4f)), Is.LessThan(0.01f));
+			Assert.That(item.Completed, Is.False);
+		}
+
+		[Test]
+		public void AHoldUntilIsAskedByFireAndTheGestureIsOverAtOnceIfItIsMet()
+		{
+			var asked = 0;
+			var item = _autoTap.Do(0, Gesture.PressAt(TestScene.At(0.5f, 0.5f)).HoldUntil(() => ++asked > 0, 1f));
+
+			Assert.That(asked, Is.EqualTo(1), "Fire carried out the step");
+			Frame(); // the press is processed
+			Assert.That(item.Completed, Is.False, "what is pressed is not released by the update that pressed it");
+			Frame();
+
+			Assert.That(item.Completed, Is.True);
+			Assert.That(item.EndReason, Is.EqualTo(AutoTapBase.EndReason.Finished));
 		}
 
 		[Test]
@@ -266,7 +319,7 @@ namespace UnityAutoTap.Tests
 		{
 			_autoTap.Do(0, Gesture.PressAt(TestScene.At(0.5f, 0.5f)).Set("pressure", 0f).Set("pressure", 1f, 0.1f));
 
-			Frame(); // the press is processed; 0 and 0.4 of the way are queued
+			Frame(); // the press and the 0 are processed; 0.4 of the way is queued
 			Frame(); // 0.4 of the way is processed; 0.8 is queued
 
 			Assert.That(Touchscreen.current.touches[0].pressure.ReadValue(), Is.EqualTo(0.4f).Within(0.0001f));
