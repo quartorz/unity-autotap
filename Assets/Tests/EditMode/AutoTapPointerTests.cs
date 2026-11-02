@@ -489,6 +489,26 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
+		public void WithTheDefaultPointerBehaviorAFingerAndAMouseDisturbEachOther()
+		{
+			// The reason why the virtual input switches to AllPointersAsIs: the same scene as in the test above, with
+			// the behavior that the input module has by default.
+			AddRecorder("Finger", 0.05f, 0.05f, 0.25f, 0.25f);
+			AddRecorder("Mouse", 0.35f, 0.05f, 0.55f, 0.25f);
+			_scene.InputModule.pointerBehavior = UIPointerBehavior.SingleMouseOrPenButMultiTouchAndTrack;
+
+			var finger = _autoTap.Tap(0, TestScene.At(0.15f, 0.15f), 0.3f);
+			Frame();
+			var mouse = _autoTap.Mouse(Gesture.PressAt(TestScene.At(0.45f, 0.15f)).Hold(0.08f));
+			RunUntilCompleted(mouse);
+			RunUntilCompleted(finger);
+
+			Assert.That(
+				UiOf("Mouse"), Is.Not.EqualTo(new[] { "enter", "down", "up", "click" }),
+				"the mouse and the finger are not two independent pointers any more");
+		}
+
+		[Test]
 		public void APressInTheMiddleOfAGestureIsRefusedWhenTheTopmostObjectIsRefused()
 		{
 			var blocked = _scene.Add<ClickHandler>("Blocked", 0.1f, 0.1f, 0.3f, 0.3f);
