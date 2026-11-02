@@ -1,3 +1,7 @@
 {
-	"name": "AutoTap"
+	"name": "AutoTap",
+	"references": [
+		"Unity.InputSystem",
+		"UnityEngine.UI"
+	]
 }

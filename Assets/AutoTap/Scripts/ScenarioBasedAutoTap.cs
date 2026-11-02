@@ -1,5 +1,5 @@
 #if ENABLE_AUTOTAP
-using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace UnityAutoTap
 {
@@ -28,9 +28,9 @@ namespace UnityAutoTap
 			}
 		}
 
-		protected override bool ToBeIgnored(Transform transform)
+		protected override bool ShouldNotPressOn(RaycastResult topmost)
 		{
-			return Scenario.ToBeIgnored(transform) || base.ToBeIgnored(transform);
+			return Scenario.ShouldNotPressOn(topmost) || base.ShouldNotPressOn(topmost);
 		}
 
 		protected override void OnPreUpdate(float deltaTime)

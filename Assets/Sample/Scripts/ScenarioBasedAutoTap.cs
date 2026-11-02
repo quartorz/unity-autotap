@@ -3,6 +3,7 @@ using System.Linq;
 using UnityAutoTap;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using Base = UnityAutoTap.ScenarioBasedAutoTap;
 
 namespace Sample
@@ -31,9 +32,9 @@ namespace Sample
 			base.OnPreUpdate(deltaTime);
 		}
 
-		protected override bool ToBeIgnored(Transform transform)
+		protected override bool ShouldNotPressOn(RaycastResult topmost)
 		{
-			return base.ToBeIgnored(transform) || !transform.IsChildOf(_mainCanvas.transform);
+			return base.ShouldNotPressOn(topmost) || !topmost.gameObject.transform.IsChildOf(_mainCanvas.transform);
 		}
 
 		public void SetJson(string json)

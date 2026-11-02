@@ -1,6 +1,6 @@
 #if ENABLE_AUTOTAP
 using System.Linq;
-using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace UnityAutoTap
 {
@@ -37,9 +37,9 @@ namespace UnityAutoTap
 			_scenarios = scenarios;
 		}
 
-		public override bool ToBeIgnored(Transform transform)
+		public override bool ShouldNotPressOn(RaycastResult topmost)
 		{
-			return Current?.ToBeIgnored(transform) == true;
+			return Current?.ShouldNotPressOn(topmost) == true;
 		}
 
 		void MoveToNext()

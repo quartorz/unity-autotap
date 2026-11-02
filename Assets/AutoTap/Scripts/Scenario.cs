@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 
 namespace UnityAutoTap
 {
@@ -26,7 +28,13 @@ namespace UnityAutoTap
 			Owner = null;
 		}
 
-		public virtual bool ToBeIgnored(Transform transform) => false;
+		/// <summary>
+		/// Decides whether a press is made at a point. See <see cref="AutoTapBase"/>'s <c>ShouldNotPressOn</c>, to
+		/// which this is forwarded.
+		/// </summary>
+		/// <param name="topmost">The topmost hit at the point of the press.</param>
+		/// <returns><c>true</c> not to press.</returns>
+		public virtual bool ShouldNotPressOn(RaycastResult topmost) => false;
 		public abstract void UpdateActive();
 
 		public virtual void Prepare()
@@ -49,14 +57,64 @@ namespace UnityAutoTap
 		{
 		}
 
-		protected GameObject Fire(int index, Vector2 from, Vector2 to, float duration)
+		/// <inheritdoc cref="AutoTapBase.Fire(int, Vector2, Vector2, float)"/>
+		protected AutoTapBase.LogItem Fire(int index, Vector2 from, Vector2 to, float duration)
 		{
 			return Owner.Fire(index, from, to, duration);
 		}
 
-		protected GameObject Fire(int index, Vector2 position, float duration)
+		/// <inheritdoc cref="AutoTapBase.Fire(int, Vector2, float)"/>
+		protected AutoTapBase.LogItem Fire(int index, Vector2 position, float duration)
 		{
-			return Owner.Fire(index, position, position, duration);
+			return Owner.Fire(index, position, duration);
+		}
+
+		/// <inheritdoc cref="AutoTapBase.Fire(int, Gesture)"/>
+		protected AutoTapBase.LogItem Fire(int index, Gesture gesture)
+		{
+			return Owner.Fire(index, gesture);
+		}
+
+		/// <inheritdoc cref="AutoTapBase.FirePointer"/>
+		protected AutoTapBase.LogItem FirePointer(string layout, Gesture gesture, int number = 0)
+		{
+			return Owner.FirePointer(layout, gesture, number);
+		}
+
+		/// <inheritdoc cref="AutoTapBase.FireDevice"/>
+		protected AutoTapBase.LogItem FireDevice(string layout, ControlSequence sequence, int number = 0)
+		{
+			return Owner.FireDevice(layout, sequence, number);
+		}
+
+		/// <inheritdoc cref="AutoTapBase.FireMouse"/>
+		protected AutoTapBase.LogItem FireMouse(Gesture gesture, int number = 0)
+		{
+			return Owner.FireMouse(gesture, number);
+		}
+
+		/// <inheritdoc cref="AutoTapBase.FirePen"/>
+		protected AutoTapBase.LogItem FirePen(Gesture gesture, int number = 0)
+		{
+			return Owner.FirePen(gesture, number);
+		}
+
+		/// <inheritdoc cref="AutoTapBase.FireScroll"/>
+		protected AutoTapBase.LogItem FireScroll(Vector2 screenPosition, Vector2 delta)
+		{
+			return Owner.FireScroll(screenPosition, delta);
+		}
+
+		/// <inheritdoc cref="AutoTapBase.FireGamepad"/>
+		protected AutoTapBase.LogItem FireGamepad(ControlSequence sequence, int number = 0)
+		{
+			return Owner.FireGamepad(sequence, number);
+		}
+
+		/// <inheritdoc cref="AutoTapBase.FireKey"/>
+		protected AutoTapBase.LogItem FireKey(Key key, float duration = 0f, params Key[] modifiers)
+		{
+			return Owner.FireKey(key, duration, modifiers);
 		}
 
 		/// <summary>
@@ -94,6 +152,10 @@ namespace UnityAutoTap
 		/// <summary>
 		/// Tap if <paramref name="target"/> is not destroyed.
 		/// </summary>
+		/// <returns>
+		/// <c>true</c> if the tap was started. Where the press is delivered to is known only after the input update
+		/// that processes it (see <see cref="AutoTapBase.LogItem.Target"/>).
+		/// </returns>
 		protected bool TryTap(int index, Canvas canvas, RectTransform target, float duration)
 		{
 			if (target != null)
@@ -101,8 +163,7 @@ namespace UnityAutoTap
 				var p = canvas != null && canvas.worldCamera != null
 					? GetScreenPoint(canvas.worldCamera, target)
 					: GetScreenPoint(target);
-				var fired = Fire(index, p, duration);
-				return fired != null && fired == target.gameObject;
+				return Fire(index, p, duration) != null;
 			}
 
 			return false;

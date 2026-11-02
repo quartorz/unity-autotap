@@ -1,0 +1,162 @@
+#if ENABLE_AUTOTAP
+using System;
+using UnityEngine.InputSystem;
+
+namespace UnityAutoTap
+{
+	/// <summary>
+	/// Adds virtual devices to the Input System and queues input to them. Both AutoTap and a replay press through
+	/// this class.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// A virtual device is added the first time its (layout, number) pair is used during a run, not when
+	/// <see cref="Acquire"/> is called. Devices that are not used are not added.
+	/// </para>
+	/// <para>
+	/// <see cref="Acquire"/> is reference counted. While at least one session is alive:
+	/// </para>
+	/// <list type="bullet">
+	/// <item><description>
+	/// In the Editor, the Input System settings that decide whether input reaches the game are replaced so that
+	/// input is delivered regardless of focus. The original settings are restored when the last session is disposed.
+	/// </description></item>
+	/// <item><description>
+	/// On every platform, the pointer behavior of <see cref="UnityEngine.InputSystem.UI.InputSystemUIInputModule"/>
+	/// is set to <see cref="UnityEngine.InputSystem.UI.UIPointerBehavior.AllPointersAsIs"/>, so that virtual fingers,
+	/// mice and pens do not cancel each other. The original behavior is restored when the last session is disposed.
+	/// </description></item>
+	/// </list>
+	/// <para>
+	/// When the last session is disposed, everything that is still pressed is released, and the virtual devices are
+	/// removed after the release was processed. Virtual devices that were left behind by a previous run are removed
+	/// at start-up and at <see cref="UnityEngine.Application.quitting"/>.
+	/// </para>
+	/// <para>
+	/// While virtual devices exist, <c>Touchscreen.current</c>, <c>Keyboard.current</c>, <c>Mouse.current</c>,
+	/// <c>Pointer.current</c>, <c>Gamepad.all</c>, <see cref="InputSystem.onDeviceChange"/> and the control scheme
+	/// chosen by a <c>PlayerInput</c> can change.
+	/// </para>
+	/// </remarks>
+	public static class VirtualInput
+	{
+		/// <summary>
+		/// Starts using virtual input.
+		/// </summary>
+		/// <returns>
+		/// A new handle. Dispose it to give up the reference taken by this call; disposing a handle twice has no
+		/// further effect.
+		/// </returns>
+		/// <exception cref="InvalidOperationException">
+		/// <see cref="InputSettings.updateMode"/> is not <see cref="InputSettings.UpdateMode.ProcessEventsInDynamicUpdate"/>.
+		/// Virtual input works only when events are processed in the dynamic update.
+		/// </exception>
+		public static VirtualInputSession Acquire()
+		{
+			throw new NotImplementedException();
+		}
+
+		/// <summary>
+		/// Tells whether <paramref name="device"/> was added by <see cref="VirtualInput"/>.
+		/// </summary>
+		/// <param name="device">The device to examine.</param>
+		/// <returns><c>true</c> for a virtual device, <c>false</c> for a real device or <c>null</c>.</returns>
+		public static bool IsVirtual(InputDevice device)
+		{
+			throw new NotImplementedException();
+		}
+	}
+
+	/// <summary>
+	/// The source of the virtual devices that <see cref="AutoTapBase"/> operates. Implemented by
+	/// <see cref="VirtualInputSession"/>; implement it to replace the Input System in tests.
+	/// </summary>
+	public interface IVirtualInput
+	{
+		/// <summary>
+		/// Gives a new finger of the virtual touchscreen.
+		/// </summary>
+		/// <returns>
+		/// The finger, or <c>null</c> if all fingers (at most 10 at a time, that is
+		/// <see cref="UnityEngine.InputSystem.LowLevel.TouchscreenState.MaxTouches"/>) are in use.
+		/// </returns>
+		VirtualFinger NewFinger();
+
+		/// <summary>
+		/// Gives a virtual pointer device other than a touchscreen.
+		/// </summary>
+		/// <param name="layout">The layout of a device derived from <see cref="Pointer"/>, for example <c>Mouse</c> or <c>Pen</c>.</param>
+		/// <param name="number">Tells apart several devices of the same layout.</param>
+		/// <returns>The same instance for the same (layout, number) pair.</returns>
+		/// <exception cref="ArgumentException">The layout is a touchscreen, or is not derived from <see cref="Pointer"/>.</exception>
+		VirtualPointer GetPointer(string layout, int number = 0);
+
+		/// <summary>
+		/// Gives a virtual device that is not a pointer.
+		/// </summary>
+		/// <param name="layout">The layout of the device, for example <c>Keyboard</c> or <c>Gamepad</c>.</param>
+		/// <param name="number">Tells apart several devices of the same layout.</param>
+		/// <returns>The same instance for the same (layout, number) pair.</returns>
+		/// <exception cref="ArgumentException">The layout is derived from <see cref="Pointer"/>.</exception>
+		VirtualDevice GetDevice(string layout, int number = 0);
+
+		/// <summary>
+		/// Reports the changes of the virtual devices only, in processing order. Always the same instance.
+		/// </summary>
+		InputChangeReader Reader { get; }
+
+		/// <summary>
+		/// Raised at the end of each Dynamic input update, after the predictions of the virtual fingers and pointers
+		/// were refreshed.
+		/// </summary>
+		event Action InputUpdated;
+	}
+
+	/// <summary>
+	/// A handle to the virtual input obtained by <see cref="VirtualInput.Acquire"/>.
+	/// </summary>
+	public sealed class VirtualInputSession : IVirtualInput, IDisposable
+	{
+		internal VirtualInputSession()
+		{
+		}
+
+		/// <inheritdoc/>
+		public VirtualFinger NewFinger()
+		{
+			throw new NotImplementedException();
+		}
+
+		/// <inheritdoc/>
+		public VirtualPointer GetPointer(string layout, int number = 0)
+		{
+			throw new NotImplementedException();
+		}
+
+		/// <inheritdoc/>
+		public VirtualDevice GetDevice(string layout, int number = 0)
+		{
+			throw new NotImplementedException();
+		}
+
+		/// <inheritdoc/>
+		public InputChangeReader Reader => throw new NotImplementedException();
+
+		/// <inheritdoc/>
+		public event Action InputUpdated
+		{
+			add => throw new NotImplementedException();
+			remove => throw new NotImplementedException();
+		}
+
+		/// <summary>
+		/// Gives up the reference to the virtual input. Releasing what is pressed and removing the devices happens
+		/// when the last reference is given up.
+		/// </summary>
+		public void Dispose()
+		{
+			throw new NotImplementedException();
+		}
+	}
+}
+#endif

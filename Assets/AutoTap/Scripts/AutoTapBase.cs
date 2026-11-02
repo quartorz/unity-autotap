@@ -2,39 +2,51 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Assertions;
-using UnityEngine.EventSystems;
-using UnityEngine.UI;
 
 namespace UnityAutoTap
 {
-	public abstract class AutoTapBase : IDisposable
+	/// <summary>
+	/// The base class of an auto tap. It operates virtual input devices as planned by what the subclass fires, and
+	/// the real <see cref="UnityEngine.InputSystem.UI.InputSystemUIInputModule"/> of the scene delivers the input to
+	/// the UI.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// Requirements:
+	/// </para>
+	/// <list type="bullet">
+	/// <item><description>
+	/// <see cref="UnityEngine.InputSystem.InputSettings.updateMode"/> is
+	/// <see cref="UnityEngine.InputSystem.InputSettings.UpdateMode.ProcessEventsInDynamicUpdate"/>.
+	/// </description></item>
+	/// <item><description>
+	/// The event system uses <see cref="UnityEngine.InputSystem.UI.InputSystemUIInputModule"/>.
+	/// </description></item>
+	/// </list>
+	/// <para>
+	/// Input is never delivered inside <c>Fire</c> or <see cref="Update(float)"/>. It is queued, processed by the
+	/// input update at the start of the next frame, and delivered to the UI by the event system.
+	/// </para>
+	/// <para>
+	/// There are two kinds of operations:
+	/// </para>
+	/// <list type="bullet">
+	/// <item><description>
+	/// Slots. Slot <c>i</c> holds at most one finger at a time, started with <c>Fire(i, ...)</c>. The number of
+	/// slots is the tap count passed to <see cref="SetupInternal"/>, and at most 10 fingers exist in total.
+	/// </description></item>
+	/// <item><description>
+	/// Operations outside the slots, started with <see cref="FirePointer"/>, <see cref="FireDevice"/> and their
+	/// shortcuts. Each virtual device holds at most one at a time.
+	/// </description></item>
+	/// </list>
+	/// </remarks>
+	public abstract partial class AutoTapBase : IDisposable
 	{
+		/// <summary>
+		/// The instance that is started, or <c>null</c>.
+		/// </summary>
 		public static AutoTapBase Current { get; private set; }
-
-		public class LogItem
-		{
-			internal bool Active;
-			internal bool CompletedThisFrame;
-			public int Index;
-			public DateTime DateTime;
-			public GameObject Target;
-			public Vector2 ScreenPoint;
-			public Vector2? DragTo;
-			public int FrameCount;
-			public float Duration;
-			public bool Completed;
-			public bool ClickExecuted;
-			public GameObject ClickTarget;
-			public int CompletedFrameCount;
-
-			public override string ToString()
-			{
-				return
-					$@"{(DragTo.HasValue ? "Drag" : "Tap")} Index: {Index} FrameCount: {FrameCount}, Duration: {Duration}, DateTime: {DateTime}
-ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject: {(Target != null ? Target.name : "(none)")}";
-			}
-		}
 
 		protected internal static class ComponentFinder<T> where T : Component
 		{
@@ -75,457 +87,47 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 			}
 		}
 
-		class Tap : IDisposable
-		{
-			public bool Active => _marker.gameObject.activeSelf;
-			public GameObject PointerPress => _eventData.pointerPress;
-			Image _marker;
-			PointerEventData _eventData;
-			Vector2 _startPosition;
-			Vector2 _endPosition;
-			float _duration;
-			float _currentTime;
-			LogItem _logItem;
-
-			readonly int _index;
-			readonly List<RaycastResult> _list;
-			readonly AutoTapBase _owner;
-
-			public Tap(Image marker, int index, int id, AutoTapBase owner, List<RaycastResult> raycastResults)
-			{
-				_index = index;
-				_marker = marker;
-				_eventData = new PointerEventData(EventSystem.current)
-				{
-					pointerId = id,
-					useDragThreshold = true
-				};
-				_owner = owner;
-				_list = raycastResults;
-			}
-
-			public void AttachLog(LogItem logItem)
-			{
-				_logItem = logItem;
-			}
-
-			public void Dispose()
-			{
-				UnityEngine.Object.Destroy(_marker.gameObject);
-				_marker = null;
-				_eventData = null;
-			}
-
-			public bool Start(Vector2 startPosition, Vector2 endPosition, float duration)
-			{
-				_eventData.position = startPosition;
-				_startPosition = startPosition;
-				_endPosition = endPosition;
-				_duration = duration;
-
-				var o = Raycast();
-				if (o != null)
-				{
-					PointerDown(o);
-					return true;
-				}
-
-				return false;
-			}
-
-			public void Stop()
-			{
-				if (!Active)
-				{
-					return;
-				}
-
-				var o = Raycast();
-				PointerUp(o);
-			}
-
-			public void Update(float deltaTime)
-			{
-				var eventSystem = EventSystem.current;
-				if (eventSystem == null || !eventSystem.enabled)
-				{
-					PointerUp(null);
-				}
-
-				if (_currentTime < _duration || _duration <= 0)
-				{
-					_currentTime += deltaTime;
-					var t = _duration <= 0 ? 1 : Mathf.InverseLerp(0, _duration, _currentTime);
-					var newPosition = Vector2.Lerp(_startPosition, _endPosition, t);
-
-					var scaleFactor = _marker.canvas.scaleFactor;
-					_marker.rectTransform.anchoredPosition =
-						new Vector2(newPosition.x / scaleFactor, newPosition.y / scaleFactor);
-
-					_eventData.delta = newPosition - _eventData.position;
-					_eventData.position = newPosition;
-
-					var target = Raycast();
-
-					if (t == 1)
-					{
-						PointerUp(target);
-					}
-					else if (_eventData.pointerDrag != null)
-					{
-						if (!_eventData.dragging
-							&& eventSystem != null
-							&& eventSystem.enabled
-							&& (newPosition - _startPosition).sqrMagnitude >=
-								eventSystem.pixelDragThreshold * eventSystem.pixelDragThreshold)
-						{
-							BeginDrag();
-						}
-
-						if (_eventData.dragging)
-						{
-							Drag();
-						}
-					}
-				}
-			}
-
-			GameObject Raycast()
-			{
-				var eventSystem = EventSystem.current;
-				if (eventSystem == null)
-				{
-					return null;
-				}
-
-				eventSystem.RaycastAll(_eventData, _list);
-				foreach (var r in _list)
-				{
-					var t = r.gameObject.transform;
-					if (!_owner.ToBeIgnored(t))
-					{
-						_eventData.pointerCurrentRaycast = r;
-						return r.gameObject;
-					}
-				}
-
-				return null;
-			}
-
-			void PointerDown(GameObject target)
-			{
-				_eventData.eligibleForClick = true;
-				_eventData.delta = Vector2.zero;
-				_eventData.dragging = false;
-				_eventData.useDragThreshold = true;
-				_eventData.pressPosition = _eventData.position;
-				_eventData.pointerPressRaycast = _eventData.pointerCurrentRaycast;
-
-				var eventSystem = EventSystem.current;
-				if (eventSystem != null)
-				{
-					var selectHandler = ExecuteEvents.GetEventHandler<ISelectHandler>(target);
-					if (selectHandler != eventSystem.currentSelectedGameObject)
-					{
-						eventSystem.SetSelectedGameObject(null, _eventData);
-					}
-				}
-
-				var currentOverGo = _eventData.pointerCurrentRaycast.gameObject;
-
-				if (_eventData.pointerEnter != currentOverGo)
-				{
-					HandlePointerExitAndEnter(currentOverGo);
-					_eventData.pointerEnter = currentOverGo;
-				}
-
-				if (Time.unscaledTime - _eventData.clickTime >= 0.3f)
-				{
-					_eventData.clickCount = 0;
-				}
-
-				var fired = ExecuteEvents.ExecuteHierarchy(target, _eventData, ExecuteEvents.pointerDownHandler);
-				var clickHandler = ExecuteEvents.GetEventHandler<IPointerClickHandler>(target);
-
-				if (fired == null)
-				{
-					fired = clickHandler;
-				}
-
-				var time = Time.unscaledTime;
-
-				if (fired == _eventData.lastPress)
-				{
-					if (time - _eventData.clickTime < 0.3f)
-					{
-						++_eventData.clickCount;
-					}
-					else
-					{
-						_eventData.clickCount = 1;
-					}
-
-					_eventData.clickTime = time;
-				}
-				else
-				{
-					_eventData.clickCount = 1;
-				}
-
-				_eventData.pointerPress = fired;
-				_eventData.rawPointerPress = target;
-				_eventData.pointerClick = clickHandler;
-
-				_eventData.clickTime = time;
-
-				_eventData.pointerDrag = ExecuteEvents.GetEventHandler<IDragHandler>(target);
-				if (_eventData.pointerDrag != null)
-				{
-					ExecuteEvents.Execute(_eventData.pointerDrag, _eventData, ExecuteEvents.initializePotentialDrag);
-				}
-
-				_currentTime = 0;
-
-				_marker.gameObject.SetActive(true);
-
-				var scaleFactor = _marker.canvas.scaleFactor;
-				_marker.rectTransform.anchoredPosition = new Vector2(_eventData.position.x / scaleFactor,
-					_eventData.position.y / scaleFactor);
-			}
-
-			void PointerUp(GameObject target)
-			{
-				ExecuteEvents.Execute(_eventData.pointerPress, _eventData, ExecuteEvents.pointerUpHandler);
-
-				var clickHandler = ExecuteEvents.GetEventHandler<IPointerClickHandler>(target);
-				var pointerClick = _eventData.pointerClick;
-				var clickExecuted = false;
-
-				if (_eventData.pointerClick == clickHandler && _eventData.eligibleForClick)
-				{
-					clickExecuted = ExecuteEvents.Execute(_eventData.pointerClick, _eventData, ExecuteEvents.pointerClickHandler);
-				}
-
-				if (_eventData.pointerDrag != null && _eventData.dragging)
-				{
-					ExecuteEvents.ExecuteHierarchy(target, _eventData, ExecuteEvents.dropHandler);
-				}
-
-				_eventData.eligibleForClick = false;
-				_eventData.pointerPress = null;
-				_eventData.rawPointerPress = null;
-				_eventData.pointerClick = null;
-
-				if (_eventData.pointerDrag != null && _eventData.dragging)
-				{
-					ExecuteEvents.Execute(_eventData.pointerDrag, _eventData, ExecuteEvents.endDragHandler);
-				}
-
-				_eventData.dragging = false;
-				_eventData.pointerDrag = null;
-
-				var currentOverGo = _eventData.pointerCurrentRaycast.gameObject;
-				if (currentOverGo != _eventData.pointerEnter)
-				{
-					HandlePointerExitAndEnter(null);
-					HandlePointerExitAndEnter(currentOverGo);
-				}
-
-				_marker.gameObject.SetActive(false);
-
-				if (_logItem != null)
-				{
-					_logItem.Completed = true;
-					_logItem.ClickExecuted = clickExecuted;
-					_logItem.ClickTarget = clickExecuted ? pointerClick : null;
-					_logItem.CompletedFrameCount = Time.frameCount;
-					_logItem.CompletedThisFrame = true;
-					_owner.OnTapCompleted(_index, _logItem);
-					_logItem = null;
-				}
-			}
-
-			void BeginDrag()
-			{
-				ExecuteEvents.Execute(_eventData.pointerDrag, _eventData, ExecuteEvents.beginDragHandler);
-				_eventData.dragging = true;
-
-				if (_eventData.pointerPress != _eventData.pointerDrag)
-				{
-					ExecuteEvents.Execute(_eventData.pointerPress, _eventData, ExecuteEvents.pointerUpHandler);
-
-					_eventData.eligibleForClick = false;
-					_eventData.pointerPress = null;
-					_eventData.rawPointerPress = null;
-				}
-			}
-
-			void Drag()
-			{
-				HandlePointerExitAndEnter(Cursor.lockState == CursorLockMode.Locked
-					? null
-					: _eventData.pointerCurrentRaycast.gameObject);
-				ExecuteEvents.Execute(_eventData.pointerDrag, _eventData, ExecuteEvents.dragHandler);
-			}
-
-			void HandlePointerExitAndEnter(GameObject newEnterTarget)
-			{
-				if (newEnterTarget == null || _eventData.pointerEnter == null)
-				{
-					var hoveredCount = _eventData.hovered.Count;
-					for (var i = 0; i < hoveredCount; ++i)
-					{
-						_eventData.fullyExited = true;
-						ExecuteEvents.Execute(_eventData.hovered[i], _eventData, ExecuteEvents.pointerMoveHandler);
-						ExecuteEvents.Execute(_eventData.hovered[i], _eventData, ExecuteEvents.pointerExitHandler);
-					}
-
-					_eventData.hovered.Clear();
-
-					if (newEnterTarget == null)
-					{
-						_eventData.pointerEnter = null;
-						return;
-					}
-				}
-
-				if (_eventData.pointerEnter == newEnterTarget && newEnterTarget)
-				{
-					if (_eventData.IsPointerMoving())
-					{
-						var hoveredCount = _eventData.hovered.Count;
-						for (var i = 0; i < hoveredCount; ++i)
-						{
-							ExecuteEvents.Execute(_eventData.hovered[i], _eventData, ExecuteEvents.pointerMoveHandler);
-						}
-					}
-
-					return;
-				}
-
-				var commonRoot = FindCommonRoot(_eventData.pointerEnter, newEnterTarget);
-
-				if (_eventData.pointerEnter != null)
-				{
-					var t = _eventData.pointerEnter.transform;
-
-					while (t != null)
-					{
-						if (commonRoot != null && commonRoot.transform == t)
-						{
-							break;
-						}
-
-						_eventData.fullyExited = t.gameObject != commonRoot && _eventData.pointerEnter != newEnterTarget;
-						ExecuteEvents.Execute(t.gameObject, _eventData, ExecuteEvents.pointerMoveHandler);
-						ExecuteEvents.Execute(t.gameObject, _eventData, ExecuteEvents.pointerExitHandler);
-						_eventData.hovered.Remove(t.gameObject);
-
-						t = t.parent;
-
-						if (commonRoot != null && commonRoot.transform == t)
-						{
-							break;
-						}
-					}
-				}
-
-				var oldPointerEnter = _eventData.pointerEnter;
-				_eventData.pointerEnter = newEnterTarget;
-
-				if (newEnterTarget != null)
-				{
-					var t = newEnterTarget.transform;
-
-					while (t != null)
-					{
-						_eventData.reentered = t.gameObject == commonRoot && t.gameObject != oldPointerEnter;
-						if (_eventData.reentered)
-						{
-							break;
-						}
-
-						ExecuteEvents.Execute(t.gameObject, _eventData, ExecuteEvents.pointerEnterHandler);
-						ExecuteEvents.Execute(t.gameObject, _eventData, ExecuteEvents.pointerMoveHandler);
-						_eventData.hovered.Add(t.gameObject);
-
-						t = t.parent;
-
-						if (commonRoot != null && commonRoot.transform == t)
-						{
-							break;
-						}
-					}
-				}
-			}
-
-			static GameObject FindCommonRoot(GameObject g1, GameObject g2)
-			{
-				if (g1 == null || g2 == null)
-				{
-					return null;
-				}
-
-				var t1 = g1.transform;
-				while (t1 != null)
-				{
-					var t2 = g2.transform;
-					while (t2 != null)
-					{
-						if (t1 == t2)
-						{
-							return t1.gameObject;
-						}
-
-						t2 = t2.parent;
-					}
-
-					t1 = t1.parent;
-				}
-
-				return null;
-			}
-		}
-
+		/// <summary>
+		/// <c>true</c> from <see cref="Start"/> until <see cref="Stop"/>.
+		/// </summary>
 		public bool Enabled { get; private set; }
 
-		int _tapCount;
-		Canvas _canvas;
+		readonly IVirtualInput _input;
 
-		Tap[] _taps;
-		LogItem[] _logItems;
+		readonly Vector3[] _fourCorners = new Vector3[4];
+		readonly float[] _floats = new float[4];
 
-		readonly List<RaycastResult> _raycastResults = new List<RaycastResult>();
+		/// <summary>
+		/// Creates an auto tap that uses <see cref="VirtualInput"/>: the virtual devices are acquired by
+		/// <see cref="Start"/> and given up by <see cref="Stop"/>.
+		/// </summary>
+		protected AutoTapBase()
+		{
+		}
 
-		Vector3[] _fourCorners;
-		float[] _floats;
+		/// <summary>
+		/// Creates an auto tap that operates the devices of <paramref name="input"/>. The caller owns
+		/// <paramref name="input"/>: this class never disposes it. Meant for replacing the Input System in tests.
+		/// </summary>
+		/// <param name="input">The source of the virtual devices.</param>
+		protected AutoTapBase(IVirtualInput input)
+		{
+			_input = input;
+		}
 
+		/// <summary>
+		/// Prepares the slots and their markers.
+		/// </summary>
+		/// <param name="canvasForMarker">The canvas that shows the markers of the operations.</param>
+		/// <param name="markerSprite">The sprite of a marker.</param>
+		/// <param name="tapCount">
+		/// The number of slots, from 1 to 10
+		/// (<see cref="UnityEngine.InputSystem.LowLevel.TouchscreenState.MaxTouches"/>).
+		/// </param>
 		protected virtual void SetupInternal(
 			Canvas canvasForMarker, Sprite markerSprite, int tapCount)
 		{
-			Assert.IsTrue(tapCount > 0 && tapCount < 20, "Tap count must be between 1 and 20");
-
-			_tapCount = tapCount;
-			Enabled = false;
-			_canvas = canvasForMarker;
-			_taps = new Tap[_tapCount];
-			_logItems = new LogItem[_tapCount];
-			_fourCorners = new Vector3[4];
-			_floats = new float[4];
-
-			for (var i = 0; i < _tapCount; ++i)
-			{
-				var markerGameObject = new GameObject($"Marker {i + 1}");
-				markerGameObject.transform.SetParent(_canvas.transform, false);
-				markerGameObject.transform.localPosition = Vector3.zero;
-				markerGameObject.SetActive(false);
-				var marker = markerGameObject.AddComponent<Image>();
-				marker.raycastTarget = false;
-				marker.sprite = markerSprite;
-				marker.SetNativeSize();
-				marker.rectTransform.anchorMin = marker.rectTransform.anchorMax = Vector2.zero;
-				_taps[i] = new Tap(marker, i, 19 - i, this, _raycastResults);
-			}
+			throw new NotImplementedException();
 		}
 
 		/// <remarks>
@@ -535,214 +137,165 @@ ScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject
 		/// <param name="markerSprite">sprite for tap marker</param>
 		public abstract void Setup(Canvas canvasForMarker, Sprite markerSprite);
 
+		/// <summary>
+		/// Calls <see cref="Stop"/> if this instance is started, and releases what it holds.
+		/// </summary>
 		public virtual void Dispose()
 		{
-			if (_taps != null)
-			{
-				foreach (var t in _taps)
-				{
-					t.Dispose();
-				}
-
-				_taps = null;
-			}
-
-			_logItems = null;
-			_canvas = null;
-			_fourCorners = null;
-			_floats = null;
+			throw new NotImplementedException();
 		}
 
+		/// <summary>
+		/// Makes this instance <see cref="Current"/> and enables it. Calling it on the current instance does
+		/// nothing.
+		/// </summary>
+		/// <exception cref="InvalidOperationException">Another instance is the current one.</exception>
 		public void Start()
 		{
-			if (Current != null)
-			{
-				if (Current == this)
-				{
-					return;
-				}
-
-				throw new InvalidOperationException();
-			}
-
-			Enabled = true;
-			Current = this;
-			OnStart();
+			throw new NotImplementedException();
 		}
 
+		/// <summary>
+		/// Called by <see cref="Start"/> after this instance became <see cref="Current"/>.
+		/// </summary>
 		protected virtual void OnStart()
 		{
 		}
 
+		/// <summary>
+		/// Stops this instance.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// <see cref="Current"/> and <see cref="Enabled"/> are reset immediately. Running operations are ended in the
+		/// order they were started: whatever they hold pressed is released, and their <see cref="LogItem"/>s end with
+		/// <see cref="EndReason.Interrupted"/>. <see cref="OnTapCompleted"/> is called for those that were started in
+		/// a slot.
+		/// </para>
+		/// <para>
+		/// The releases reach the UI in the next input update, not inside this method.
+		/// </para>
+		/// </remarks>
+		/// <exception cref="InvalidOperationException">This instance is not the current one.</exception>
 		public void Stop()
 		{
-			if (Current != this)
-			{
-				throw new InvalidOperationException();
-			}
-
-			Current = null;
-			Enabled = false;
-			for (var i = 0; i < _logItems.Length; ++i)
-			{
-				if (_logItems[i] is { } logItem)
-				{
-					logItem.Active = false;
-					logItem.CompletedThisFrame = false;
-				}
-			}
-
-			foreach (var tap in _taps)
-			{
-				tap.Stop();
-			}
-
-			OnStop();
+			throw new NotImplementedException();
 		}
 
+		/// <summary>
+		/// Called by <see cref="Stop"/> after <see cref="Current"/> was reset.
+		/// </summary>
 		protected virtual void OnStop()
 		{
 		}
 
-		protected virtual void CreateLog(
-			int index, GameObject target, Vector2 startPosition, Vector2 endPosition, float duration,
-			out LogItem logItem)
-		{
-			logItem = _logItems[index] ?? new LogItem();
-			logItem.Index = index;
-			logItem.DateTime = DateTime.Now;
-			logItem.Target = target;
-			logItem.ScreenPoint = startPosition;
-			logItem.DragTo = (startPosition == endPosition) ? null : (Vector2?)endPosition;
-			logItem.Duration = duration;
-			logItem.FrameCount = Time.frameCount;
-			logItem.Completed = false;
-			logItem.ClickExecuted = false;
-			logItem.ClickTarget = null;
-			logItem.CompletedFrameCount = 0;
-		}
-
+		/// <summary>
+		/// Called when an operation that was started in a slot ended.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// It is called from <see cref="Update(float)"/> before the slots are visited, in the order the ends were
+		/// processed (<see cref="LogItem.CompletedOrder"/>). Operations that were ended by <see cref="Stop"/> are
+		/// reported from inside <see cref="Stop"/>. It is not called for operations outside the slots; read their
+		/// ends with <see cref="GetLatestLogs"/>.
+		/// </para>
+		/// <para>
+		/// For an operation that includes a drag, <see cref="LogItem.Dragged"/> is <c>true</c> and the
+		/// <see cref="LogItem.CompletedOrder"/> of the item is the end of the drag. Whether the click or the drop
+		/// was delivered is a prediction at that point (<see cref="LogItem.ClickExecuted"/>,
+		/// <see cref="LogItem.DropTarget"/>).
+		/// </para>
+		/// </remarks>
+		/// <param name="index">The slot.</param>
+		/// <param name="logItem">The operation that ended.</param>
 		protected virtual void OnTapCompleted(int index, LogItem logItem)
 		{
 		}
 
-		protected virtual bool ToBeIgnored(Transform transform)
+		/// <summary>
+		/// Returns what happened in the latest Dynamic input update, as one sequence in the order the Input System
+		/// processed it.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// Each element is a <see cref="LogItem"/>, what happened to it (<see cref="LogEventKind"/>) and the sequence
+		/// number of the processed change that caused it. When several things happened to one item in one input
+		/// update, they are several elements.
+		/// </para>
+		/// <para>
+		/// The sequence is renewed at the start of each Dynamic input update, not at the start of
+		/// <see cref="Update(float)"/>. An operation is processed by the input update at the start of a frame, so it
+		/// can be read in <see cref="OnPreUpdate"/>, in <see cref="Update(int)"/>, in <see cref="OnPostUpdate"/> and
+		/// after <see cref="Update(float)"/> of that frame, until the next frame's input update.
+		/// </para>
+		/// <para>
+		/// An operation fired in frame N is queued by <c>Fire</c> and processed by the input update of frame N + 1,
+		/// so it is in the sequence of frame N + 1. The <see cref="LogItem"/> that <c>Fire</c> returns is returned at
+		/// once, before any of this.
+		/// </para>
+		/// <para>
+		/// Elements are ordered by <see cref="LogEvent.Order"/>. Elements without an order come after those that
+		/// have one: <see cref="LogEventKind.Completed"/> of items that were dropped
+		/// (<see cref="EndReason.Dropped"/>) at the end of that input update, in the order the items were fired.
+		/// </para>
+		/// </remarks>
+		public IEnumerable<LogEvent> GetLatestLogs()
 		{
-			return false;
+			throw new NotImplementedException();
 		}
 
-		public IEnumerable<LogItem> GetLatestLogs()
-		{
-			foreach (var logItem in _logItems)
-			{
-				if (logItem is {Active: true})
-				{
-					yield return logItem;
-				}
-			}
-		}
-
-		public IEnumerable<LogItem> GetLatestCompletedLogs()
-		{
-			foreach (var logItem in _logItems)
-			{
-				if (logItem is {CompletedThisFrame: true})
-				{
-					yield return logItem;
-				}
-			}
-		}
-
+		/// <summary>
+		/// Runs the auto tap for one frame. Call it once per frame; it does nothing while not <see cref="Enabled"/>.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// The work is done in this order:
+		/// </para>
+		/// <list type="number">
+		/// <item><description><see cref="OnPreUpdate"/>.</description></item>
+		/// <item><description>
+		/// <see cref="OnTapCompleted"/> for the slot operations that ended, in the order of
+		/// <see cref="LogItem.CompletedOrder"/>.
+		/// </description></item>
+		/// <item><description>
+		/// Each slot in turn: a running operation is advanced and its next step queued; an empty slot gets
+		/// <see cref="Update(int)"/>.
+		/// </description></item>
+		/// <item><description>
+		/// The running operations outside the slots, in the order they were started, are advanced.
+		/// </description></item>
+		/// <item><description><see cref="OnPostUpdate"/>.</description></item>
+		/// </list>
+		/// </remarks>
+		/// <param name="deltaTime">The time since the previous call, in seconds.</param>
 		public void Update(float deltaTime)
 		{
-			if (!Enabled)
-			{
-				return;
-			}
-
-			OnPreUpdate(deltaTime);
-
-			for (var i = 0; i < _taps.Length; ++i)
-			{
-				var tap = _taps[i];
-				if (_logItems[i] is { } logItem)
-				{
-					logItem.Active = false;
-					logItem.CompletedThisFrame = false;
-				}
-
-				if (tap.Active)
-				{
-					tap.Update(deltaTime);
-				}
-				else
-				{
-					Update(i);
-				}
-			}
-
-			OnPostUpdate(deltaTime);
+			throw new NotImplementedException();
 		}
 
+		/// <summary>
+		/// Called at the start of <see cref="Update(float)"/>.
+		/// </summary>
+		/// <param name="deltaTime">The time passed to <see cref="Update(float)"/>.</param>
 		protected virtual void OnPreUpdate(float deltaTime)
 		{
 		}
 
+		/// <summary>
+		/// Called at the end of <see cref="Update(float)"/>.
+		/// </summary>
+		/// <param name="deltaTime">The time passed to <see cref="Update(float)"/>.</param>
 		protected virtual void OnPostUpdate(float deltaTime)
 		{
 		}
 
+		/// <summary>
+		/// Called once per <see cref="Update(float)"/> for each slot that is empty. Start an operation with
+		/// <c>Fire(index, ...)</c>.
+		/// </summary>
+		/// <param name="index">The empty slot.</param>
 		protected virtual void Update(int index)
 		{
-		}
-
-		protected internal GameObject Fire(int index, Vector2 position, float duration)
-		{
-			return Fire(index, position, position, duration);
-		}
-
-		protected internal GameObject Fire(int index, Vector2 startPosition, Vector2 endPosition, float duration)
-		{
-			if (startPosition.x < 0 || startPosition.x > Screen.width || startPosition.y < 0 ||
-				startPosition.y > Screen.height)
-			{
-				return null;
-			}
-
-			if (endPosition.x < 0 || endPosition.x > Screen.width || endPosition.y < 0 || endPosition.y > Screen.height)
-			{
-				return null;
-			}
-
-#if USE_LEGACY_INPUT
-			if (!Input.multiTouchEnabled)
-			{
-				foreach (var t in _taps)
-				{
-					if (t.Active)
-					{
-						return null;
-					}
-				}
-			}
-#endif
-
-			var tap = _taps[index];
-
-			if (tap.Start(startPosition, endPosition, duration))
-			{
-				CreateLog(index, tap.PointerPress, startPosition, endPosition, duration, out _logItems[index]);
-				if (_logItems[index] is { } logItem)
-				{
-					logItem.Active = true;
-				}
-
-				tap.AttachLog(_logItems[index]);
-
-				return tap.PointerPress;
-			}
-
-			return null;
 		}
 
 		/// <summary>

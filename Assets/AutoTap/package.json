@@ -1,9 +1,13 @@
 {
     "name": "red.quart.unity-autotap",
-    "version": "1.5.2",
+    "version": "2.0.0",
     "description": "auto tap",
     "displayName": "Unity AutoTap",
-    "unity": "2020.3",
+    "unity": "6000.4",
+    "dependencies": {
+        "com.unity.inputsystem": "1.19.0",
+        "com.unity.ugui": "2.0.0"
+    },
     "author": {
         "name": "quartorz"
     }
