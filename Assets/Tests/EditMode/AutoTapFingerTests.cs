@@ -60,7 +60,7 @@ namespace UnityAutoTap.Tests
 
 			Assert.That(item, Is.Not.Null);
 			Assert.That(item.Index, Is.EqualTo(0));
-			Assert.That(item.Kind, Is.EqualTo(AutoTapBase.LogItemKind.Tap));
+			Assert.That(item.Kind, Is.EqualTo(AutoTapBase.LogItemKind.Finger));
 			Assert.That(item.Order, Is.Null);
 			Assert.That(item.Completed, Is.False);
 			Assert.That(Touchscreen.current.touches[0].isInProgress, Is.False);
@@ -160,7 +160,6 @@ namespace UnityAutoTap.Tests
 			var from = TestScene.At(0.2f, 0.2f);
 			var to = TestScene.At(0.6f, 0.4f);
 			var item = _autoTap.Drag(0, from, to, 0.1f);
-			Assert.That(item.DragTo, Is.EqualTo(to));
 
 			Frame(); // press processed; the first Update queues t = 0.4
 			Frame(); // processes t = 0.4; queues t = 0.8
@@ -245,7 +244,6 @@ namespace UnityAutoTap.Tests
 			Frame(); // the hold ends with 0.03 left; the move starts and queues t = 0.75 of the new destination
 			Frame();
 
-			Assert.That(item.DragTo, Is.EqualTo(destination));
 			var moved = _changes.OfType<TouchMoved>().First();
 			Assert.That(Vector2.Distance(moved.Position, Vector2.Lerp(from, destination, 0.75f)), Is.LessThan(0.01f));
 		}
@@ -269,8 +267,7 @@ namespace UnityAutoTap.Tests
 			var item = _autoTap.Do(0, Gesture.PressAt(p).Set("pressure", 0.5f).MoveTo(q, 0f).Hold(0.2f));
 
 			Assert.That(item, Is.Not.Null);
-			Assert.That(_changes, Is.Empty, "Fire processes nothing");
-			Assert.That(item.DragTo, Is.EqualTo(q), "the move was carried out by Fire");
+			Assert.That(_changes, Is.Empty, "Simulate processes nothing");
 			Frame();
 
 			Assert.That(_changes.Select(c => c.UpdateCount).Distinct().Count(), Is.EqualTo(1), "one input update processes them all");

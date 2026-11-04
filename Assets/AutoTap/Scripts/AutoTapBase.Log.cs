@@ -13,19 +13,10 @@ namespace UnityAutoTap
 		public enum LogItemKind
 		{
 			/// <summary>
-			/// A finger that is pressed and released at one position (<c>Fire(index, position, duration)</c>).
+			/// A finger that follows a <see cref="UnityAutoTap.Gesture"/> (<c>Fire(index, gesture)</c>, and the taps and
+			/// drags that are shortcuts of it).
 			/// </summary>
-			Tap,
-
-			/// <summary>
-			/// A finger that is moved in a straight line (<c>Fire(index, from, to, duration)</c>).
-			/// </summary>
-			Drag,
-
-			/// <summary>
-			/// A finger that follows a <see cref="UnityAutoTap.Gesture"/> (<c>Fire(index, gesture)</c>).
-			/// </summary>
-			Gesture,
+			Finger,
 
 			/// <summary>
 			/// A pointer other than a finger that follows a <see cref="UnityAutoTap.Gesture"/>
@@ -191,22 +182,9 @@ namespace UnityAutoTap
 			public Vector2 ScreenPoint;
 
 			/// <summary>
-			/// The destination of the move of <see cref="LogItemKind.Drag"/>; for <see cref="LogItemKind.Gesture"/>
-			/// and <see cref="LogItemKind.Pointer"/> the destination of the last move. <c>null</c> if the operation
-			/// does not move.
-			/// </summary>
-			public Vector2? DragTo;
-
-			/// <summary>
 			/// <see cref="Time.frameCount"/> when <c>Fire</c> was called.
 			/// </summary>
 			public int FrameCount;
-
-			/// <summary>
-			/// The time in seconds given to <c>Fire</c>. <see cref="float.NaN"/> when the operation was given as a
-			/// <see cref="UnityAutoTap.Gesture"/> or a <see cref="ControlSequence"/>.
-			/// </summary>
-			public float Duration;
 
 			/// <summary>
 			/// The sequence number of the change that started the operation. <c>null</c> until it was processed.
@@ -302,8 +280,8 @@ namespace UnityAutoTap
 			public GameObject ClickTarget;
 
 			/// <summary>
-			/// The plan of the operation, for <see cref="LogItemKind.Gesture"/> and <see cref="LogItemKind.Pointer"/>.
-			/// <c>null</c> otherwise.
+			/// The plan of the operation, for <see cref="LogItemKind.Finger"/> and <see cref="LogItemKind.Pointer"/>.
+			/// What a tap, a drag and a hold last is in its steps. <c>null</c> otherwise.
 			/// </summary>
 			public Gesture Gesture;
 
@@ -315,14 +293,14 @@ namespace UnityAutoTap
 			/// <inheritdoc/>
 			public override string ToString()
 			{
-				var head = $"{Kind} Index: {Index} FrameCount: {FrameCount}, Duration: {Duration}, DateTime: {DateTime}";
+				var head = $"{Kind} Index: {Index} FrameCount: {FrameCount}, DateTime: {DateTime}";
 				if (Kind == LogItemKind.Device)
 				{
 					return $"{head}\nDevice: {(Device != null ? Device.name : "(none)")}";
 				}
 
 				return
-					$"{head}\nScreenPoint: {ScreenPoint}{(DragTo.HasValue ? $" → {DragTo}" : "")} GameObject: {(Target != null ? Target.name : "(none)")}";
+					$"{head}\nScreenPoint: {ScreenPoint} GameObject: {(Target != null ? Target.name : "(none)")}";
 			}
 		}
 	}

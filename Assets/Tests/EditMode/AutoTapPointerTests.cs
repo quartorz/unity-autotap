@@ -589,7 +589,6 @@ namespace UnityAutoTap.Tests
 			RunUntilCompleted(item);
 
 			Assert.That(Mouse.current.position.ReadValue(), Is.EqualTo(destination));
-			Assert.That(item.DragTo, Is.EqualTo(destination));
 		}
 
 		[Test]

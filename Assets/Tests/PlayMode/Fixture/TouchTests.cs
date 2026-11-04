@@ -595,7 +595,7 @@ namespace UnityAutoTap.Tests
 			Assert.That(tap, Is.TypeOf<TestLogItem>());
 			Assert.That(key, Is.TypeOf<TestLogItem>());
 			Assert.That(Auto.CreatedItems, Is.EqualTo(new[] { 2, -1 }));
-			Assert.That(tap.Kind, Is.EqualTo(LogItemKind.Tap));
+			Assert.That(tap.Kind, Is.EqualTo(LogItemKind.Finger));
 			Assert.That(tap.Index, Is.EqualTo(2));
 			Assert.That(key.Kind, Is.EqualTo(LogItemKind.Device));
 			Assert.That(key.Index, Is.EqualTo(-1));

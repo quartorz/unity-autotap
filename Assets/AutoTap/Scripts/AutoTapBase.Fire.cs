@@ -61,7 +61,7 @@ namespace UnityAutoTap
 		protected internal LogItem Fire(int index, Vector2 position, float duration)
 		{
 			var gesture = Gesture.PressAt(position).Hold(Mathf.Max(0f, duration));
-			return FireFinger(index, gesture, LogItemKind.Tap, duration);
+			return FireFinger(index, gesture);
 		}
 
 		/// <summary>
@@ -78,7 +78,7 @@ namespace UnityAutoTap
 		protected internal LogItem Fire(int index, Vector2 from, Vector2 to, float duration)
 		{
 			var gesture = Gesture.PressAt(from).MoveTo(to, Mathf.Max(0f, duration));
-			return FireFinger(index, gesture, LogItemKind.Drag, duration);
+			return FireFinger(index, gesture);
 		}
 
 		/// <summary>
@@ -97,7 +97,7 @@ namespace UnityAutoTap
 				throw new ArgumentNullException(nameof(gesture));
 			}
 
-			return FireFinger(index, gesture, LogItemKind.Gesture, float.NaN);
+			return FireFinger(index, gesture);
 		}
 
 		/// <summary>
@@ -184,22 +184,13 @@ namespace UnityAutoTap
 			}
 
 			var item = NewLogItem(-1) ?? new LogItem();
-			FillItem(
-				item, -1, LogItemKind.Pointer, pointer.Device, plan.Start, plan.LastMove, float.NaN, target, dragTarget,
-				gesture, null);
+			FillItem(item, -1, LogItemKind.Pointer, pointer.Device, plan.Start, target, dragTarget, gesture, null);
 
 			var operation = new PointerOperation(item, ++_fireSequence, pointer, gesture, plan.StepCount);
 			operation.Refuses = position =>
 			{
 				var topmost = PointerPredictor.Probe(position).Topmost;
 				return topmost.gameObject != null && ShouldNotPressOn(topmost);
-			};
-			operation.Runner.MoveStarted = destination =>
-			{
-				if (destination != item.ScreenPoint)
-				{
-					item.DragTo = destination;
-				}
 			};
 
 			_operations.Add(operation);
@@ -241,7 +232,7 @@ namespace UnityAutoTap
 		/// </exception>
 		protected internal LogItem FireDevice(string layout, ControlSequence sequence, int number = 0)
 		{
-			return FireDeviceSequence(layout, sequence, number, float.NaN);
+			return FireDeviceSequence(layout, sequence, number);
 		}
 
 		/// <summary>
@@ -318,10 +309,10 @@ namespace UnityAutoTap
 				}
 			}
 
-			return FireDeviceSequence("Keyboard", sequence, 0, duration);
+			return FireDeviceSequence("Keyboard", sequence, 0);
 		}
 
-		LogItem FireDeviceSequence(string layout, ControlSequence sequence, int number, float duration)
+		LogItem FireDeviceSequence(string layout, ControlSequence sequence, int number)
 		{
 			ThrowIfDisposed();
 
@@ -349,7 +340,7 @@ namespace UnityAutoTap
 			}
 
 			var item = NewLogItem(-1) ?? new LogItem();
-			FillItem(item, -1, LogItemKind.Device, device.Device, Vector2.zero, null, duration, null, null, null, sequence);
+			FillItem(item, -1, LogItemKind.Device, device.Device, Vector2.zero, null, null, null, sequence);
 
 			var operation = new DeviceOperation(item, ++_fireSequence, device, sequence, buttons);
 			_operations.Add(operation);
@@ -368,8 +359,8 @@ namespace UnityAutoTap
 		/// <see cref="NewLogItem"/> did is left except its type and its own fields.
 		/// </summary>
 		void FillItem(
-			LogItem item, int index, LogItemKind kind, InputDevice device, Vector2 start, Vector2? dragTo, float duration,
-			GameObject target, GameObject dragTarget, Gesture gesture, ControlSequence sequence)
+			LogItem item, int index, LogItemKind kind, InputDevice device, Vector2 start, GameObject target,
+			GameObject dragTarget, Gesture gesture, ControlSequence sequence)
 		{
 			item.Index = index;
 			item.Kind = kind;
@@ -377,9 +368,7 @@ namespace UnityAutoTap
 			item.DateTime = DateTime.Now;
 			item.Target = target;
 			item.ScreenPoint = start;
-			item.DragTo = dragTo.HasValue && dragTo.Value != start ? dragTo : null;
 			item.FrameCount = Time.frameCount;
-			item.Duration = duration;
 			item.Order = null;
 			item.StartedFrameCount = 0;
 			item.Dragged = false;
@@ -397,7 +386,7 @@ namespace UnityAutoTap
 			item.Sequence = sequence;
 		}
 
-		LogItem FireFinger(int index, Gesture gesture, LogItemKind kind, float duration)
+		LogItem FireFinger(int index, Gesture gesture)
 		{
 			ThrowIfDisposed();
 
@@ -443,19 +432,9 @@ namespace UnityAutoTap
 				throw;
 			}
 
-			FillItem(
-				item, index, kind, finger.Device, plan.Start,
-				plan.LastMove.HasValue && plan.LastMove.Value != plan.Start ? plan.LastMove : null, duration, probe.Press,
-				probe.Drag, kind == LogItemKind.Gesture ? gesture : null, null);
+			FillItem(item, index, LogItemKind.Finger, finger.Device, plan.Start, probe.Press, probe.Drag, gesture, null);
 
 			var operation = new FingerOperation(index, item, ++_fireSequence, finger, gesture, plan.StepCount);
-			operation.Runner.MoveStarted = destination =>
-			{
-				if (destination != item.ScreenPoint)
-				{
-					item.DragTo = destination;
-				}
-			};
 
 			finger.Press(plan.Start);
 			_slots[index] = operation;

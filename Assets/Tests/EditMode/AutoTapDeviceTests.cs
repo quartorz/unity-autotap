@@ -143,7 +143,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void TheDurationOfAKeyIsHeldAndRecorded()
+		public void TheDurationOfAKeyIsHeld()
 		{
 			var item = _autoTap.Key(Key.Space, 0.1f);
 
@@ -151,7 +151,6 @@ namespace UnityAutoTap.Tests
 			Frame();
 			Frame();
 			Assert.That(Keyboard.current.spaceKey.isPressed, Is.True, "held for 0.1 s: 0.04, 0.08");
-			Assert.That(item.Duration, Is.EqualTo(0.1f));
 			RunUntilCompleted(item);
 
 			Assert.That(Keyboard.current.spaceKey.isPressed, Is.False);

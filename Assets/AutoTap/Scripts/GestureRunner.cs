@@ -99,11 +99,6 @@ namespace UnityAutoTap
 		public bool PressedInLastAdvance { get; private set; }
 
 		/// <summary>
-		/// Raised when a move starts, with its destination.
-		/// </summary>
-		public Action<Vector2> MoveStarted;
-
-		/// <summary>
 		/// Stops the gesture because a press was refused. The caller ends the operation with
 		/// <see cref="AutoTapBase.EndReason.Refused"/>.
 		/// </summary>
@@ -164,7 +159,6 @@ namespace UnityAutoTap
 							_to = step.PositionFunc != null ? step.PositionFunc() : step.Position;
 							_elapsed = 0;
 							_started = true;
-							MoveStarted?.Invoke(_to);
 						}
 
 						if (step.Seconds <= 0)

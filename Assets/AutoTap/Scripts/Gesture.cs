@@ -254,7 +254,6 @@ namespace UnityAutoTap
 			}
 
 			var points = new List<Vector2> { Steps[0].Position };
-			Vector2? lastMove = null;
 			for (var i = 1; i < count; ++i)
 			{
 				var step = Steps[i];
@@ -264,7 +263,6 @@ namespace UnityAutoTap
 						if (step.PositionFunc == null)
 						{
 							points.Add(step.Position);
-							lastMove = step.Position;
 						}
 
 						break;
@@ -281,7 +279,7 @@ namespace UnityAutoTap
 				}
 			}
 
-			return new FingerPlan(Steps[0].Position, points, lastMove, count);
+			return new FingerPlan(Steps[0].Position, points, count);
 		}
 
 		/// <summary>
@@ -299,19 +297,17 @@ namespace UnityAutoTap
 			}
 
 			var points = new List<Vector2> { Steps[0].Position };
-			Vector2? lastMove = null;
 			for (var i = 1; i < Steps.Count; ++i)
 			{
 				var step = Steps[i];
 				if (step.Kind == StepKind.Move && step.PositionFunc == null)
 				{
 					points.Add(step.Position);
-					lastMove = step.Position;
 				}
 			}
 
 			return new PointerPlan(
-				Steps[0].Position, Steps[0].Kind == StepKind.Press, Steps[0].Button, points, lastMove, Steps.Count);
+				Steps[0].Position, Steps[0].Kind == StepKind.Press, Steps[0].Button, points, Steps.Count);
 		}
 	}
 
@@ -320,11 +316,10 @@ namespace UnityAutoTap
 	/// </summary>
 	internal sealed class FingerPlan
 	{
-		public FingerPlan(Vector2 start, List<Vector2> points, Vector2? lastMove, int stepCount)
+		public FingerPlan(Vector2 start, List<Vector2> points, int stepCount)
 		{
 			Start = start;
 			Points = points;
-			LastMove = lastMove;
 			StepCount = stepCount;
 		}
 
@@ -339,11 +334,6 @@ namespace UnityAutoTap
 		public List<Vector2> Points { get; }
 
 		/// <summary>
-		/// The destination of the last move whose destination is known before the gesture runs.
-		/// </summary>
-		public Vector2? LastMove { get; }
-
-		/// <summary>
 		/// The number of steps to run: all steps except a release at the very end, which the end of the gesture does
 		/// anyway.
 		/// </summary>
@@ -356,14 +346,12 @@ namespace UnityAutoTap
 	internal sealed class PointerPlan
 	{
 		public PointerPlan(
-			Vector2 start, bool startsWithPress, string firstButton, List<Vector2> points, Vector2? lastMove,
-			int stepCount)
+			Vector2 start, bool startsWithPress, string firstButton, List<Vector2> points, int stepCount)
 		{
 			Start = start;
 			StartsWithPress = startsWithPress;
 			FirstButton = firstButton;
 			Points = points;
-			LastMove = lastMove;
 			StepCount = stepCount;
 		}
 
@@ -386,11 +374,6 @@ namespace UnityAutoTap
 		/// The position of the first step and every destination that is known before the gesture runs.
 		/// </summary>
 		public List<Vector2> Points { get; }
-
-		/// <summary>
-		/// The destination of the last move whose destination is known before the gesture runs.
-		/// </summary>
-		public Vector2? LastMove { get; }
 
 		/// <summary>
 		/// The number of steps to run, which is every step.

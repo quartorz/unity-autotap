@@ -128,29 +128,46 @@ namespace UnityAutoTap.Tests
 			Assert.That(item.Index, Is.EqualTo(1));
 			Assert.That(item.ScreenPoint, Is.EqualTo(TestScene.At(0.2f, 0.2f)));
 			Assert.That(item.FrameCount, Is.EqualTo(Time.frameCount));
-			Assert.That(item.Duration, Is.EqualTo(0f));
-			Assert.That(item.DragTo, Is.Null);
 		}
 
 		[Test]
-		public void ADragAndAGestureRecordTheirDestination()
+		public void AnItemRecordsItsKindAndThePlanItWasGiven()
 		{
 			var from = TestScene.At(0.2f, 0.2f);
 			var to = TestScene.At(0.4f, 0.2f);
-			var drag = _autoTap.Drag(0, from, to, 0.1f);
-			var gesture = Gesture.PressAt(from).MoveTo(to, 0.1f);
-			var item = _autoTap.Do(1, gesture);
-			var still = _autoTap.Drag(2, from, from, 0.1f);
+			var dragGesture = Gesture.PressAt(from).MoveTo(to, 0.1f);
+			var hoverGesture = Gesture.HoverAt(from);
+			var sequence = new ControlSequence().Press(Key.A).Release(Key.A);
 
-			Assert.That(drag.Kind, Is.EqualTo(AutoTapBase.LogItemKind.Drag));
-			Assert.That(drag.DragTo, Is.EqualTo(to));
-			Assert.That(drag.Duration, Is.EqualTo(0.1f));
-			Assert.That(drag.Gesture, Is.Null);
-			Assert.That(item.Kind, Is.EqualTo(AutoTapBase.LogItemKind.Gesture));
-			Assert.That(item.DragTo, Is.EqualTo(to));
-			Assert.That(item.Duration, Is.NaN);
-			Assert.That(item.Gesture, Is.SameAs(gesture));
-			Assert.That(still.DragTo, Is.Null);
+			var tap = _autoTap.Tap(0, from, 0.1f);
+			var drag = _autoTap.Do(1, dragGesture);
+			var hover = _autoTap.Mouse(hoverGesture);
+			var device = _autoTap.Device("Keyboard", sequence);
+
+			Assert.That(tap.Kind, Is.EqualTo(AutoTapBase.LogItemKind.Finger));
+			Assert.That(tap.Gesture, Is.Not.Null, "a tap is a gesture of a press and a hold");
+			Assert.That(tap.Sequence, Is.Null);
+			Assert.That(drag.Kind, Is.EqualTo(AutoTapBase.LogItemKind.Finger));
+			Assert.That(drag.Gesture, Is.SameAs(dragGesture));
+			Assert.That(hover.Kind, Is.EqualTo(AutoTapBase.LogItemKind.Pointer));
+			Assert.That(hover.Gesture, Is.SameAs(hoverGesture));
+			Assert.That(hover.Sequence, Is.Null);
+			Assert.That(device.Kind, Is.EqualTo(AutoTapBase.LogItemKind.Device));
+			Assert.That(device.Sequence, Is.SameAs(sequence));
+			Assert.That(device.Gesture, Is.Null);
+		}
+
+		[Test]
+		public void ToStringNamesTheKindTheSlotAndWhatWasHit()
+		{
+			var item = _autoTap.Tap(1, TestScene.At(0.2f, 0.2f), 0f);
+			var device = _autoTap.Key(Key.A);
+
+			Assert.That(item.ToString(), Does.StartWith("Finger Index: 1 FrameCount: "));
+			Assert.That(item.ToString(), Does.EndWith("GameObject: (none)"));
+			Assert.That(item.ToString(), Does.Not.Contain("Duration"));
+			Assert.That(device.ToString(), Does.StartWith("Device Index: -1 FrameCount: "));
+			Assert.That(device.ToString(), Does.Contain("Device: AutoTap-Keyboard-0"));
 		}
 
 		[Test]
