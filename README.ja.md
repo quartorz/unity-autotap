@@ -18,7 +18,7 @@ UI のハンドラーを直接呼ぶことはしません。Input System に仮�
 
 1. Unity Package Manager を開きます。
 2. "Add package from git URL" を選びます。
-3. `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.1.0` を入力します。
+3. `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.1.1` を入力します。
 4. Scripting Define Symbols に `ENABLE_AUTOTAP` を足します。パッケージ全体が、このシンボルがあるときだけコンパイルされます。
 
 Input System も仮想デバイスも要らない v1 を使い続けるときは、URL の末尾を `#v1.5.2` にします: `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v1.5.2`。
@@ -321,11 +321,12 @@ _item = Simulate<Gamepad>(sequence);
 
 `Update(float)` は、auto tap が有効でない間（`Start` の前と `Stop` の後）は何もしません。有効なときは、次の順で動きます。
 
-1. `OnPreUpdate`。
-2. 終わったスロットの操作について `OnTapCompleted`。`LogItem.CompletedOrder` の順。
-3. スロットを順に: 動いている操作を進めて次のステップをキューに入れる。空のスロットには `Update(int index)` が呼ばれる。
-4. スロットの外で動いている操作を、始めた順に進める。
-5. `OnPostUpdate`。
+1. `GetLatestLogs()` が返す並びが作り直される（[`GetLatestLogs()`](#getlatestlogs)を参照）。
+2. `OnPreUpdate`。
+3. 終わったスロットの操作について `OnTapCompleted`。`LogItem.CompletedOrder` の順。
+4. スロットを順に: 動いている操作を進めて次のステップをキューに入れる。空のスロットには `Update(int index)` が呼ばれる。
+5. スロットの外で動いている操作を、始めた順に進める。
+6. `OnPostUpdate`。
 
 `Stop` は、動いている操作を、始めた順に終わらせます。押しているものは離され、その `LogItem` は `EndReason.Interrupted` で終わります。スロットにあった操作については、`Stop` の中で `OnTapCompleted` が呼ばれます。
 
@@ -374,7 +375,7 @@ ScreenPoint: (100.0, 200.0) → (300.0, 400.0) GameObject: Button
 
 ### `GetLatestLogs()`
 
-`GetLatestLogs()` は、起きたことを読む唯一の場所です。最新の Dynamic の入力更新で起きたことの並びを、Input System が処理した順に返します。その更新で何も起きなければ、並びは空です。
+`GetLatestLogs()` は、起きたことを読む唯一の場所です。前の `Update(float)` から今までに起きたことの並びを、Input System が処理した順に返します。何も起きなければ、並びは空です。
 
 ```csharp
 foreach (var e in GetLatestLogs())
@@ -386,17 +387,23 @@ foreach (var e in GetLatestLogs())
 ```
 
 - 戻り値は `LogEventSequence` で、`IReadOnlyList<LogEvent>` を実装する readonly struct です。auto tap のログを直接参照するもので、写しではありません。`foreach`、`Count`、添字では、割り当てが起きません。LINQ や `IEnumerable<LogEvent>` を通すと、enumerator が boxing されて割り当てが起きます。`default` の値は空の並びです。
-- 並びが有効なのは、次の Dynamic の入力更新が始まるまでです。そのあとで、並びを回す、`Count` を読む、要素を読む、のどれをしても `InvalidOperationException` を投げます。新しい並びが空のときも同じです。並びの外の添字は `ArgumentOutOfRangeException` を投げます。要素をあとで使うときは、写しを取ってください（たとえば `ToArray()` で）。
-- 並びは、`Update(float)` の頭ではなく、Dynamic の入力更新の頭で作り直されます。フレーム N で Simulate した操作は、フレーム N + 1 の並びに入り、そのフレームの `OnPreUpdate`、`Update(int)`、`OnPostUpdate`、`Update(float)` のあとで読めます。
-- auto tap は、作られてから `Dispose` されるまで、開始しているかどうかにかかわらず、入力更新の通知を受け取ります。そのため、並びは常に最新の更新のものです。`Start` の前でも、`Stop` のあとでも、仮想入力が外されたあとでも、並びは作り直され、何も起きなければ空になります。`Dispose` は並びを空にし、それまでに返した並びを無効にします。一度も開始しなかった auto tap も、`Dispose` してください。
-- 2 つの入力更新の間に起きたことは、その前の入力更新の並びには入りません。たとえば、Input System がデバイスをリセットする（`InputSystem.ResetDevice` や、デバイスを無効にしたとき）と、そのデバイスを使う操作は、その時点で終わります。それらの `Completed` の要素は、次の入力更新の並びに入ります。並びの中では、要素の番号の順に入り、その更新が処理する変化より前になります。`LogItem` は、すぐに書き換わります。
-- 1 つの item に、1 回の入力更新で複数のことが起きたときは、複数の要素になります。
+- 並びは、動いた `Update(float)` の頭で作り直され、それ以外のときには作り直されません。並びが有効なのは、次の `Update(float)` が始まるまでです。そのあとで、並びを回す、`Count` を読む、要素を読む、のどれをしても `InvalidOperationException` を投げます。新しい並びが空のときも同じです。並びの外の添字は `ArgumentOutOfRangeException` を投げます。要素をあとで使うときは、写しを取ってください（たとえば `ToArray()` で）。
+- 最後の `Update(float)` の並びは、次の `Update(float)` が始まるまで、最新のままです。時間がたっても空にはなりません。auto tap が有効でない間、`Update(float)` は何もしないので、`Start` の前と `Stop` のあとでは、並びは変わりません。`Dispose` は並びを空にし、それまでに返した並びを無効にします。一度も開始しなかった auto tap も、`Dispose` してください。
+- どの並びに入るかは、起きたのが `Update(float)` の中か外かで決まります。
+  - `Update(float)` の外で起きたことは、取っておかれ、次の `Update(float)` が作る並びの先頭になります。フレームの頭の入力更新が処理したこと（操作の開始、ドラッグの開始、操作の終わり）と、前の `Update(float)` が終わったあとに起きたことです。たとえば、Input System がデバイスをリセットする（`InputSystem.ResetDevice` や、デバイスを無効にしたとき）と、そのデバイスを使う操作は、その時点で終わります。`Update(float)` を呼ばなかったフレームで起きたことも、失われません。
+  - `Update(float)` の中で起きたことは、その場で、その呼び出しの並びに足されます。`OnPreUpdate`、`Update(int)`、`OnPostUpdate`、`OnTapCompleted` と、それらが呼ぶもの（シナリオなど）が含まれます。たとえば、シナリオが呼んだ `Stop` が終わらせた操作の `Completed` は、その呼び出しの並びに入ります。そこで呼んだ `ResetDevice` や `DisableDevice` が終わらせた操作の `Completed` も同じです。
+
+  どれも、入る並びは 1 つだけです。2 つに入ることはなく、下の `Update(float)` の外での `Stop` を除いて、どれにも入らないこともありません。`LogItem` は、どの並びに入る場合も、すぐに書き換わります。
+- フレーム N で Simulate した操作は、フレーム N + 1 の入力更新が処理するので、フレーム N + 1 の `Update(float)` が作る並びに入ります。そのフレームの `OnPreUpdate`、`Update(int)`、`OnPostUpdate`、`Update(float)` のあとで読めます。
+- `Update(float)` の中で足されたものは、同じ呼び出しの中ですでに返した並びからも見えます。並びは有効なままで、例外も投げません。`Count` はそのときの数です。`foreach` などで回している最中でも、始まったあとに足された要素まで回ります。要素は `Order` で位置が決まるので、回している位置より前に足された要素があると、それより後ろの要素が 1 つずつ後ろにずれ、最後に読んだ要素をもう一度読みます。それが困るときは、先に写しを取ってください。
+- 1 つの item に、前の `Update(float)` から今までに複数のことが起きたときは、複数の要素になります。
 - 要素は `Order` の順です。番号のない要素は、ほかの要素のあとに、item を Simulate した順に並びます。次のものの `Completed` です。
-  - `Dropped` になった item。そのイベントを捨てた入力更新の並びに入る。
-  - `Stop` が終わらせた item。次の入力更新の並びに入る。その入力更新が離しを処理するから。
+  - `Dropped` になった item。そのイベントを捨てた入力更新のあとの `Update(float)` の並びに入る。
+  - `Stop` が終わらせた item。`Stop` を呼んだ `Update(float)` の並びに入る。
   - 終わりでどの control も変わらない item。何も押さない hover や、control がすでに持っている値の `Set` など。離すものがないので、手順が終わったあとの最初の入力更新で終わる。
 
-  これらの `Order` は `null` で、item の `CompletedOrder` も `null` です。どの item の終わりも、1 回だけ並びに入ります。
+  これらの `Order` は `null` で、item の `CompletedOrder` も `null` です。どの item の終わりも、下の例外を除いて、1 回だけ並びに入ります。
+- **`Update(float)` の外での `Stop`。** `Stop` が終わらせた操作の終わりは、どの並びにも入りません。auto tap が有効でない間、`Update(float)` は何もしないので、それを受け取る並びが作られません。また、`Start` は前の実行が取っておいたものを捨てるので、次の実行の並びに混ざることもありません。スロットで始めた操作では、`Stop` の中で `OnTapCompleted` が呼ばれます。それ以外では、`Simulate` が返した `LogItem` を持っておいてください。item はすぐに終わり、`Completed` と `EndReason` で分かります。または、`Update(float)` の中で `Stop` を呼んでください。
 - 押しを処理する更新より前に `Stop` が終わらせた item は、`Order` が `null` のままです。操作は途中で切られたので、そのあとで処理される押しは、その item のものとされません。
 - `OnTapCompleted(index, logItem)` はスロット用です。スロットを順に見る前に、`Update(float)` から、終わりが処理された順（`CompletedOrder`）に呼ばれます。`Stop` が終わらせた操作では、`Stop` の中で呼ばれます。スロットの外の操作は、`GetLatestLogs()` で読みます。
 - 番号（`Order`、`DragStartedOrder`、`CompletedOrder`）は、仮想入力の `InputChangeReader` の番号です。互いに比べられます。ドラッグの終わり（`endDrag`、`drop`）は、`Dragged` が `true` の item の `CompletedOrder` です。
@@ -475,6 +482,26 @@ auto tap か、ほかの session が生きている間、仮想入力は Input S
 - "Process Events In Dynamic Update" 以外の update mode。
 - 生のイベントの記録と再生。それには `InputEventTrace` を使います。
 
+## 2.1.0 から 2.1.1 への移行
+
+2.1.1 は、`GetLatestLogs()` が返す並びを作り直す時点を変えます。2.1.0 では、Dynamic の入力更新が始まるたびに作り直していました。今は `Update(float)` の頭で作り直し、ほかのときには作り直しません。シグネチャは変わっていないので、コードはそのままコンパイルできます。
+
+| | 2.1.0 | 2.1.1 |
+|---|---|---|
+| 並びを作り直す時点 | Dynamic の入力更新が始まるたび。auto tap が作られてから `Dispose` されるまで | 動いた `Update(float)` の頭 |
+| 並びの中身 | その入力更新で起きたことと、2 つの入力更新の間に起きたこと | 前の `Update(float)` から今までに起きたこと。入力更新が処理したこと、2 回の呼び出しの間に起きたこと、その呼び出しの中で起きたこと |
+| `Update(float)` の中で `Stop` が終わらせた操作、または、`Update(float)` の中で呼んだ `ResetDevice` や `DisableDevice` が終わらせた操作の `Completed` | 次の入力更新の並びに入る | その `Update(float)` の並びに入る |
+| `Update(float)` の外で `Stop` が終わらせた操作の `Completed` | 次の入力更新の並びに入る | どの並びにも入らない。`Start` が捨てる |
+| `Update(float)` を呼ばないフレーム | そのフレームの入力更新が並びを作り、それより前のフレームで起きたことは消えた | 何も失われない。次の `Update(float)` の並びに入る |
+| auto tap が有効でない間（`Start` の前、`Stop` のあと） | 入力更新のたびに作り直されるので、並びは空になった | 並びは変わらない |
+
+自分のコードで確かめること:
+
+- 同じフレームの `Update(float)` のあとで `GetLatestLogs()` を読んでいるなら、サンプルの `DebugManager` と同じなので、変える必要はありません。
+- フレームの `Update(float)` より前に動く場所で読んでいるなら、`Update(float)` のあと、または `OnPreUpdate`、`Update(int)`、`OnPostUpdate` の中に移してください。`Update(float)` より前では、前の呼び出しの並びが返ります。
+- `Update(float)` の外で止めた操作の終わりが並びに出ることを当てにしていたなら、もう出ません。スロットの操作では、`Stop` の中で `OnTapCompleted` が呼ばれます。それ以外では、`Simulate` が返した `LogItem` を持っておき、`Completed` と `EndReason` を見てください。または、シナリオが呼ぶように、`Update(float)` の中で `Stop` を呼んでください。
+- `Stop` のあとに並びが空になることを当てにしていたなら、もう空になりません。最後の `Update(float)` の並びが残ります。
+
 ## 2.0.0 から 2.1.0 への移行
 
 2.1.0 には、2.0.0 からの破壊的変更が含まれます。semantic versioning では 3.0.0 にあたります。2.1.0 にしたのは、2.0.0 の設計の不備を直すもので、2.0.0 が出たばかりだったからです。
@@ -534,7 +561,7 @@ public class RandomTap : AutoTapBase
 
 - `Simulate<Touchscreen>(...)` と `Simulate("Touchscreen", ...)` は、実行時に `ArgumentException` を投げます。指は `Simulate(slot, gesture)` で押します。
 - `Scenario.TryTap` は残ります。`RectTransform` から押す点を求め、押しが `target` に届くかを判定します。押すときは `Simulate(index, Gesture.PressAt(point).Hold(duration))` を呼びます。
-- `GetLatestLogs()` は `IEnumerable<LogEvent>` ではなく、`IReadOnlyList<LogEvent>` を実装する readonly struct の `AutoTapBase.LogEventSequence` を返します。最新の Dynamic の入力更新で起きたことの並びである点は変わらず、`foreach`、LINQ、`IEnumerable<LogEvent>` 型の変数も、そのままコンパイルできます。ただし、`foreach`、`Count`、添字では割り当てが起きなくなり、LINQ や `IEnumerable<LogEvent>` を通すと割り当てが起きます。並びが有効なのは、次の Dynamic の入力更新が始まるまでです。そのあとで並びを回す、`Count` を読む、要素を読む、のどれをしても `InvalidOperationException` を投げます。2.0.0 では、返るものは有効なままの写しでした。要素をあとで使うなら、今、要素の写しを取ってください（たとえば `ToArray()` で）。並びは、auto tap が作られてから `Dispose` されるまで、Dynamic の入力更新のたびに作り直され、何も起きなければ空になります。2 つの入力更新の間に起きたこと（デバイスのリセットなど）は、次の更新の並びに入ります。
+- `GetLatestLogs()` は `IEnumerable<LogEvent>` ではなく、`IReadOnlyList<LogEvent>` を実装する readonly struct の `AutoTapBase.LogEventSequence` を返します。最新の Dynamic の入力更新で起きたことの並びである点は変わらず、`foreach`、LINQ、`IEnumerable<LogEvent>` 型の変数も、そのままコンパイルできます。ただし、`foreach`、`Count`、添字では割り当てが起きなくなり、LINQ や `IEnumerable<LogEvent>` を通すと割り当てが起きます。並びが有効なのは、次の Dynamic の入力更新が始まるまでです。そのあとで並びを回す、`Count` を読む、要素を読む、のどれをしても `InvalidOperationException` を投げます。2.0.0 では、返るものは有効なままの写しでした。要素をあとで使うなら、今、要素の写しを取ってください（たとえば `ToArray()` で）。並びは、auto tap が作られてから `Dispose` されるまで、Dynamic の入力更新のたびに作り直され、何も起きなければ空になります。2 つの入力更新の間に起きたこと（デバイスのリセットなど）は、次の更新の並びに入ります。2.1.1 では、並びを作り直す時点が変わります（[2.1.0 から 2.1.1 への移行](#210-から-211-への移行)を参照）。
 - `LogItem.ToString` は、操作の種類（`Finger`、`Pointer`、`Device`）から始まります。2.0.0 で `DragTo` を出していた `ScreenPoint` の後ろに、`EndScreenPoint` を出します。`Duration` も出します。`null` のものは出しません。
 
 **追加されたもの**
@@ -590,7 +617,7 @@ v2 には、v1 の自前の raycast がありません。Input System が必要�
 - `CreateLog(index, target, startPosition, endPosition, duration, out logItem)` は `NewLogItem(int index)` になりました。item を作るだけで、フィールドはあとから埋まります。item は操作ごとに新しく作られます。v1 はスロットごとに 1 つの item を使い回していました。
 
 **ログ**
-- `GetLatestLogs()` は、最新の入力更新で起きたことを、処理した順（`Started`、`DragStarted`、`Completed`）に、`LogEvent` の並びとして返します。v1 は、動いていたスロットの `LogItem` を返していました。その更新で何も起きなければ、並びは空です。並びは `LogEventSequence` で、`foreach` で割り当てが起きない struct です。次の Dynamic の入力更新まで有効です（[`GetLatestLogs()`](#getlatestlogs)を参照）。捨てられた item、`Stop` が終わらせた item、終わりで何も変わらなかった item の終わりは、番号なしで最後に来ます。`GetLatestCompletedLogs()` はなくなりました。
+- `GetLatestLogs()` は、前の `Update(float)` から今までに起きたことを、処理した順（`Started`、`DragStarted`、`Completed`）に、`LogEvent` の並びとして返します。v1 は、動いていたスロットの `LogItem` を返していました。何も起きなければ、並びは空です。並びは `LogEventSequence` で、`foreach` で割り当てが起きない struct です。次の `Update(float)` まで有効です（[`GetLatestLogs()`](#getlatestlogs)を参照）。捨てられた item、`Stop` が終わらせた item、終わりで何も変わらなかった item の終わりは、番号なしで最後に来ます。`GetLatestCompletedLogs()` はなくなりました。
 - `LogItem` のフィールドは変わりました。v1 の `DragTo` は今の `EndScreenPoint` に、`Duration` は `float?` になりました。どちらも、操作が終わるまでは手順の値、終わったあとは実際の値で、手順から決まらないうちは `null` です。`EndScreenPoint` は指や pointer を最後に置く位置なので、動かない操作にもあります。`DragTo` にはありませんでした。手順は `LogItem.Gesture` と `LogItem.Sequence` から読め、`LogItem.CurrentStep` は、いま実行しているステップです。`ClickExecuted` と `ClickTarget` は予測です。
 - `LogItem.ToString` は v1 のものに近くなりました。v1 が `Tap` か `Drag` で始まっていたところは、操作の種類（`Finger`、`Pointer`、`Device`）で始まります。`null` のものは出しません。
 - pointer id は Input System のものです。指では `(deviceId << 24) + touchId`、マウスとペンではデバイスの id です。

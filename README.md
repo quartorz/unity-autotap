@@ -25,7 +25,7 @@ it: pointer ids, enter and exit, long presses, drags, scrolling, navigation with
 
 1. Open the Unity Package Manager.
 2. Select "Add package from git URL".
-3. Enter `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.1.0`.
+3. Enter `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.1.1`.
 4. Add `ENABLE_AUTOTAP` to the Scripting Define Symbols. The whole package is compiled only with this symbol.
 
 To stay on v1, which needs neither the Input System nor virtual devices, end the URL with `#v1.5.2`:
@@ -415,11 +415,12 @@ frame N + 1  input update (start of the frame): the Input System processes them,
 `Update(float)` does nothing while the auto tap is not enabled (before `Start`, after `Stop`). Otherwise it works in this
 order:
 
-1. `OnPreUpdate`.
-2. `OnTapCompleted` for the slot operations that ended, in the order of `LogItem.CompletedOrder`.
-3. Each slot in turn: a running operation is advanced and its next step queued; an empty slot gets `Update(int index)`.
-4. The running operations outside the slots, in the order they were started, are advanced.
-5. `OnPostUpdate`.
+1. The sequence that `GetLatestLogs()` returns is built again (see [`GetLatestLogs()`](#getlatestlogs)).
+2. `OnPreUpdate`.
+3. `OnTapCompleted` for the slot operations that ended, in the order of `LogItem.CompletedOrder`.
+4. Each slot in turn: a running operation is advanced and its next step queued; an empty slot gets `Update(int index)`.
+5. The running operations outside the slots, in the order they were started, are advanced.
+6. `OnPostUpdate`.
 
 `Stop` ends the running operations in the order they were started: what they hold is released, and their `LogItem`s end
 with `EndReason.Interrupted`. `OnTapCompleted` is called inside `Stop` for those that were in a slot.
@@ -493,8 +494,8 @@ ScreenPoint: (100.0, 200.0) → (300.0, 400.0) GameObject: Button
 
 ### `GetLatestLogs()`
 
-`GetLatestLogs()` is the one place to read what happened. It returns the sequence of what happened in the latest Dynamic
-input update, in the order the Input System processed it. The sequence is empty if nothing happened in that update.
+`GetLatestLogs()` is the one place to read what happened. It returns what happened since the previous `Update(float)`, as
+one sequence in the order the Input System processed it. The sequence is empty if nothing happened.
 
 ```csharp
 foreach (var e in GetLatestLogs())
@@ -508,30 +509,51 @@ foreach (var e in GetLatestLogs())
 - The return value is a `LogEventSequence`, a readonly struct that implements `IReadOnlyList<LogEvent>`. It is a view of
   the log of the auto tap, not a copy. A `foreach` over it, `Count` and the indexer allocate nothing. Going through
   LINQ or `IEnumerable<LogEvent>` boxes the enumerator, which allocates. A `default` value is an empty sequence.
-- The sequence is valid until the next Dynamic input update starts. After that, enumerating it, reading its `Count` and
-  reading an element all throw `InvalidOperationException`, also when the new sequence is empty. An index outside the
-  sequence throws `ArgumentOutOfRangeException`. To use the elements later, make a copy (for example with `ToArray()`).
-- The sequence is rebuilt at the start of every Dynamic input update, not at the start of `Update(float)`. An operation
-  simulated in frame N is in the sequence of frame N + 1, and can be read in `OnPreUpdate`, `Update(int)`,
-  `OnPostUpdate` and after `Update(float)` of that frame.
-- The auto tap listens to the input updates from its construction until `Dispose`, whether or not it is started. So the
-  sequence is always the one of the latest update, also before `Start`, after `Stop` and after the virtual input was
-  removed: it is rebuilt then, and empty if nothing happened. `Dispose` empties it and makes the sequences that were
-  returned invalid. Dispose an auto tap that was never started, too.
-- What happens between two input updates is not in the sequence of the update before it. For example, when the Input
-  System resets a device (`InputSystem.ResetDevice`, or disabling it), the operations that use it end at that moment.
-  Their `Completed` elements are in the sequence of the next input update, at the position of their sequence number,
-  which is before the changes that update processes. The `LogItem` itself is changed at once.
-- When several things happened to one item in one input update, they are several elements.
+- The sequence is rebuilt at the start of every `Update(float)` that runs, and at no other time. It is valid until the
+  next `Update(float)` starts. After that, enumerating it, reading its `Count` and reading an element all throw
+  `InvalidOperationException`, also when the new sequence is empty. An index outside the sequence throws
+  `ArgumentOutOfRangeException`. To use the elements later, make a copy (for example with `ToArray()`).
+- The sequence of the latest `Update(float)` stays the latest one until the next `Update(float)` starts. Nothing empties it
+  when time passes. `Update(float)` does nothing while the auto tap is not enabled, so the sequence does not change before
+  `Start` and after `Stop`. `Dispose` empties it and makes the sequences that were returned invalid. Dispose an auto tap
+  that was never started, too.
+- What goes into which sequence depends on whether it happens inside `Update(float)`.
+  - What happens outside `Update(float)` is kept, and is the start of the sequence that the next `Update(float)` builds.
+    That is what the input update at the start of the frame processed (the start of an operation, the start of its drag,
+    its end), and what happened after the previous `Update(float)` ended. For example, when the Input System resets a
+    device (`InputSystem.ResetDevice`, or disabling it), the operations that use it end at that moment. Nothing is lost
+    in a frame in which `Update(float)` is not called.
+  - What happens inside `Update(float)` is added to the sequence of that call at once. That covers `OnPreUpdate`,
+    `Update(int)`, `OnPostUpdate`, `OnTapCompleted` and what they call, such as a scenario. For example, the `Completed`
+    of an operation that a `Stop` called by a scenario ended is in the sequence of that call, and so is the `Completed` of
+    an operation that a `ResetDevice` or `DisableDevice` called there ended.
+
+  Each of these is in one sequence only: not in two, and, except for `Stop` outside `Update(float)` (below), not in none.
+  The `LogItem` itself is changed at once, whichever sequence the event goes into.
+- An operation simulated in frame N is processed by the input update of frame N + 1, so it is in the sequence that
+  `Update(float)` builds in frame N + 1. It can be read in `OnPreUpdate`, `Update(int)`, `OnPostUpdate` and after
+  `Update(float)` of that frame.
+- What is added inside `Update(float)` is also visible in a sequence that was returned earlier in the same call, and the
+  sequence stays valid: the `Count` that you read is the one of that moment, and an enumeration that is running visits what
+  was added after it started. Nothing is thrown. An element takes its place by its `Order`, so an element that is added in
+  front of the position of a running enumeration moves the ones behind it by one place, and the element that was visited
+  last is visited once more. Make a copy first if that matters.
+- When several things happened to one item since the previous `Update(float)`, they are several elements.
 - Elements are ordered by `Order`. The elements without a number come after the others, in the order the items were
   simulated. They are the `Completed` of
-  - an item that was `Dropped`, in the sequence of the input update that discarded its event,
-  - an item that `Stop` ended, in the sequence of the next input update, because that is the one that processes its
-    release, and
+  - an item that was `Dropped`, in the sequence of the `Update(float)` that follows the input update that discarded its
+    event,
+  - an item that `Stop` ended, in the sequence of the `Update(float)` that called `Stop`, and
   - an item whose end changes no control, such as a hover that presses nothing or a `Set` of the value that a control
     already has. Such an item has nothing to release, so it ends in the first input update after its plan is over.
 
-  Their `Order` is `null`, and so is the `CompletedOrder` of the item. Every item's end is listed once.
+  Their `Order` is `null`, and so is the `CompletedOrder` of the item. Every item's end is listed once, with the exception
+  below.
+- **`Stop` outside `Update(float)`.** The end of an operation that `Stop` ended is not in any sequence. `Update(float)`
+  does nothing while the auto tap is not enabled, so no sequence is built that could take it, and `Start` discards what
+  an earlier run kept, so it does not turn up in the sequences of the next run. For an operation that was started in a
+  slot, `OnTapCompleted` is called inside `Stop`. For the others, keep the `LogItem` that `Simulate` returned: it ends
+  at once, and `Completed` and `EndReason` tell. Or call `Stop` inside `Update(float)`.
 - An item that `Stop` ended before the update that processes its press keeps `Order` `null`: the operation was cut off, so
   the press that is processed afterwards is not attributed to it.
 - `OnTapCompleted(index, logItem)` is for the slots. It is called from `Update(float)` before the slots are visited, in the
@@ -658,6 +680,33 @@ The virtual input changes the Input System for as long as an auto tap, or any ot
 - An update mode other than "Process Events In Dynamic Update".
 - Recording and replaying raw events. `InputEventTrace` does that.
 
+## Moving from 2.1.0 to 2.1.1
+
+2.1.1 changes when the sequence that `GetLatestLogs()` returns is built again. It was built again at the start of every
+Dynamic input update in 2.1.0. It is built again at the start of `Update(float)` now, and at no other time. No signature
+changed, so the code compiles as it did.
+
+| | 2.1.0 | 2.1.1 |
+|---|---|---|
+| When the sequence is built again | at the start of every Dynamic input update, from the construction of the auto tap until `Dispose` | at the start of every `Update(float)` that runs |
+| What is in it | what happened in that input update, and what happened between two input updates | what happened since the previous `Update(float)`: what the input updates processed, what happened between two calls, and what happened inside the call |
+| The `Completed` of an operation that `Stop` ended inside `Update(float)`, or that a `ResetDevice` or `DisableDevice` called inside `Update(float)` ended | in the sequence of the next input update | in the sequence of that `Update(float)` |
+| The `Completed` of an operation that `Stop` ended outside `Update(float)` | in the sequence of the next input update | in no sequence. `Start` discards it |
+| A frame in which `Update(float)` is not called | its input update built the sequence, and what happened in the frames before was gone | nothing is lost: it is in the sequence of the next `Update(float)` |
+| While the auto tap is not enabled (before `Start`, after `Stop`) | the sequence was rebuilt by each input update, so it became empty | the sequence does not change |
+
+What to check in your code:
+
+- If you read `GetLatestLogs()` after `Update(float)` of the same frame, as the sample's `DebugManager` does, nothing has to
+  change.
+- If you read it in a place that runs before `Update(float)` of the frame, move the read after `Update(float)`, or into
+  `OnPreUpdate`, `Update(int)` or `OnPostUpdate`. Before `Update(float)`, you get the sequence of the previous call.
+- If you counted on the end of an operation that you stopped outside `Update(float)` to show up in the sequence, it does
+  not. For an operation in a slot, `OnTapCompleted` is called inside `Stop`. For the others, keep the `LogItem` that
+  `Simulate` returned, and look at `Completed` and `EndReason`. Or call `Stop` inside `Update(float)`, where a scenario
+  calls it.
+- If you counted on the sequence to be empty after `Stop`, it is not: the sequence of the last `Update(float)` stays.
+
 ## Moving from 2.0.0 to 2.1.0
 
 2.1.0 contains breaking changes from 2.0.0. By semantic versioning that would make it 3.0.0. It is 2.1.0 because the
@@ -735,7 +784,8 @@ its constructor too.
   so make a copy of the elements now if you keep them for later (for example with `ToArray()`). The sequence is
   rebuilt in every Dynamic input update from the construction of the auto tap until `Dispose`, and is empty if nothing
   happened in it. What happens between two input updates, such as the reset of a device, is in the sequence of the next
-  update.
+  update. 2.1.1 changes when the sequence is rebuilt: see
+  [Moving from 2.1.0 to 2.1.1](#moving-from-210-to-211).
 - `LogItem.ToString` starts with the kind (`Finger`, `Pointer` or `Device`). It shows `EndScreenPoint` after
   `ScreenPoint`, where 2.0.0 showed `DragTo`, and it shows `Duration`. It leaves out what is `null`.
 
@@ -808,11 +858,12 @@ some things that were true in v1 are not true any more.
   slot.
 
 **Log**
-- `GetLatestLogs()` returns what happened in the latest input update, in processing order (`Started`, `DragStarted`,
-  `Completed`), as a sequence of `LogEvent`; v1 returned the `LogItem`s of the slots that were active. The sequence is
-  empty if nothing happened in that update. It is a `LogEventSequence`, a struct that allocates nothing in a `foreach`,
-  and it is valid until the next Dynamic input update (see [`GetLatestLogs()`](#getlatestlogs)). The ends of items that were dropped, that
-  `Stop` ended, or that changed nothing at their end come last, without a number. `GetLatestCompletedLogs()` is removed.
+- `GetLatestLogs()` returns what happened since the previous `Update(float)`, in processing order (`Started`,
+  `DragStarted`, `Completed`), as a sequence of `LogEvent`; v1 returned the `LogItem`s of the slots that were active. The
+  sequence is empty if nothing happened. It is a `LogEventSequence`, a struct that allocates nothing in a `foreach`, and it
+  is valid until the next `Update(float)` (see [`GetLatestLogs()`](#getlatestlogs)). The ends of items that were dropped,
+  that `Stop` ended, or that changed nothing at their end come last, without a number. `GetLatestCompletedLogs()` is
+  removed.
 - `LogItem` has other fields. `DragTo` of v1 is `EndScreenPoint` now, and `Duration` is a `float?`. Both are the planned
   value until the operation ends and the actual value after that, and `null` while the plan does not tell.
   `EndScreenPoint` is where the finger or pointer is put last, so an operation that does not move has one too, which
