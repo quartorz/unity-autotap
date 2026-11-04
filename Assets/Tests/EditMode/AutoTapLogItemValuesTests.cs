@@ -393,16 +393,16 @@ namespace UnityAutoTap.Tests
 			for (var i = 0; i < 10 && !item.Completed; ++i)
 			{
 				InputSystem.Update();
+				_autoTap.Update(k_Dt);
 				foreach (var log in _autoTap.GetLatestLogs())
 				{
 					logs.Add(log);
 					snapshots.Add((log.Kind, log.Item.Duration, log.Item.CurrentStep, log.Item.Completed));
 				}
-
-				_autoTap.Update(k_Dt);
 			}
 
 			InputSystem.Update();
+			_autoTap.Update(k_Dt);
 			foreach (var log in _autoTap.GetLatestLogs())
 			{
 				logs.Add(log);

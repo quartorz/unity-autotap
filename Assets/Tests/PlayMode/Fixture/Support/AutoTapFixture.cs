@@ -42,13 +42,13 @@ namespace UnityAutoTap.Tests
 
 		/// <summary>
 		/// <c>true</c> to append <see cref="AutoTapBase.GetLatestLogs"/> to <see cref="LogTrace"/> after every
-		/// <see cref="Step"/>.
+		/// <see cref="Step"/> in which <see cref="AutoTapBase.Update(float)"/> ran, which is what builds it.
 		/// </summary>
 		protected bool CollectLogs { get; set; }
 
 		/// <summary>
-		/// The elements of <see cref="AutoTapBase.GetLatestLogs"/> of every frame since <see cref="CollectLogs"/> was
-		/// switched on, with the frame they were read in.
+		/// The elements of <see cref="AutoTapBase.GetLatestLogs"/> of every <see cref="AutoTapBase.Update(float)"/> since
+		/// <see cref="CollectLogs"/> was switched on, with the frame they were read in.
 		/// </summary>
 		protected readonly List<(int Frame, LogEvent Event)> LogTrace = new List<(int Frame, LogEvent Event)>();
 
@@ -199,8 +199,8 @@ namespace UnityAutoTap.Tests
 		protected IEnumerator Step(Action inUpdate = null)
 		{
 			yield return null;
-			Tick(inUpdate);
-			if (CollectLogs && Auto != null)
+			var updated = Tick(inUpdate);
+			if (CollectLogs && updated)
 			{
 				foreach (var logEvent in Auto.GetLatestLogs())
 				{
@@ -212,16 +212,21 @@ namespace UnityAutoTap.Tests
 		/// <summary>
 		/// Runs <see cref="AutoTapBase.Update(float)"/> of <see cref="Auto"/> without waiting for a frame.
 		/// </summary>
-		protected void Tick(Action inUpdate = null)
+		/// <returns>
+		/// <c>true</c> if <see cref="Auto"/> was running, so that <see cref="AutoTapBase.Update(float)"/> built its log
+		/// again.
+		/// </returns>
+		protected bool Tick(Action inUpdate = null)
 		{
 			if (Auto == null || !Auto.Enabled)
 			{
 				inUpdate?.Invoke();
-				return;
+				return false;
 			}
 
 			Auto.PreUpdateAction = inUpdate;
 			Auto.Update(Dt);
+			return true;
 		}
 
 		protected IEnumerator Steps(int count)

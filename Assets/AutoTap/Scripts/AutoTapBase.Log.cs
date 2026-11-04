@@ -137,19 +137,62 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// What happened in one Dynamic input update, as returned by <see cref="GetLatestLogs"/>: a read-only list of
-		/// <see cref="LogEvent"/>s in the order the Input System processed them.
+		/// An element of the log of this auto tap: a <see cref="LogEvent"/> and what puts it in its place.
+		/// </summary>
+		readonly struct LogEntry
+		{
+			public LogEntry(LogEvent logEvent, long startSequence)
+			{
+				Event = logEvent;
+				StartSequence = startSequence;
+			}
+
+			public LogEvent Event { get; }
+
+			/// <summary>
+			/// The order in which the operation was started, which orders the elements that have no sequence number.
+			/// </summary>
+			public long StartSequence { get; }
+
+			/// <summary>
+			/// Tells whether this element goes in front of <paramref name="other"/>: elements are ordered by
+			/// <see cref="LogEvent.Order"/>, those without one come after those that have one, in the order the
+			/// operations were started. Elements that are equal keep the order they were added in.
+			/// </summary>
+			public bool ComesBefore(LogEntry other)
+			{
+				if (Event.Order.HasValue)
+				{
+					return !other.Event.Order.HasValue || Event.Order.Value < other.Event.Order.Value;
+				}
+
+				return !other.Event.Order.HasValue && StartSequence < other.StartSequence;
+			}
+		}
+
+		/// <summary>
+		/// What happened since the earlier <see cref="Update(float)"/>, as returned by <see cref="GetLatestLogs"/>: a
+		/// read-only list of <see cref="LogEvent"/>s in the order the Input System processed them.
 		/// </summary>
 		/// <remarks>
 		/// <para>
-		/// It is a view of the log of this auto tap, not a copy, and it is valid only until the next Dynamic input
-		/// update starts, which builds the log again. After that, enumerating it, reading <see cref="Count"/> or reading
-		/// an element throws <see cref="InvalidOperationException"/>. Copy what is needed later (<c>ToArray()</c> of
-		/// LINQ, for example).
+		/// It is a view of the log of this auto tap, not a copy, and it is valid only until the next
+		/// <see cref="Update(float)"/> that runs, which builds the log again. After that, and after
+		/// <see cref="Dispose"/>, enumerating it, reading <see cref="Count"/> or reading an element throws
+		/// <see cref="InvalidOperationException"/>. Copy what is needed later (<c>ToArray()</c> of LINQ, for example).
 		/// </para>
 		/// <para>
 		/// Enumerating it with <c>foreach</c> allocates nothing, the way a <see cref="List{T}"/> does not. Enumerating
 		/// it as an <see cref="IEnumerable{T}"/>, which LINQ does, boxes the enumerator and allocates.
+		/// </para>
+		/// <para>
+		/// While <see cref="Update(float)"/> runs, what it causes (the end of an operation that a <see cref="Stop"/> or a
+		/// reset of a device ended, for example) is added to the log at once, so a sequence that was returned earlier in
+		/// the same <see cref="Update(float)"/> shows it too, and it does not throw. <see cref="Count"/> is the number at
+		/// the time it is read, and an enumeration or a loop over the indexes visits what was added after it started.
+		/// An element takes its place by the order of the log, so one that is added in front of the position of a running
+		/// enumeration moves the elements behind it by one place, and the element that was visited last is visited
+		/// once more. Make a copy first if that matters.
 		/// </para>
 		/// <para>
 		/// A <c>default</c> value is an empty sequence.
@@ -195,7 +238,7 @@ namespace UnityAutoTap
 						throw new ArgumentOutOfRangeException(nameof(index));
 					}
 
-					return _owner._log[index];
+					return _owner._log[index].Event;
 				}
 			}
 
@@ -224,7 +267,7 @@ namespace UnityAutoTap
 				if (_owner != null && _owner._logVersion != _version)
 				{
 					throw new InvalidOperationException(
-						"The log was built again by an input update after this sequence was returned. "
+						"The log was built again after this sequence was returned, which every Update(float) does. "
 						+ "Copy the elements that are needed later.");
 				}
 			}
@@ -262,7 +305,7 @@ namespace UnityAutoTap
 					_sequence.ThrowIfOutOfDate();
 					if (_sequence._owner != null && _index < _sequence._owner._log.Count)
 					{
-						_current = _sequence._owner._log[_index];
+						_current = _sequence._owner._log[_index].Event;
 						++_index;
 						return true;
 					}

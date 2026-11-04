@@ -38,11 +38,18 @@ namespace UnityAutoTap.Tests
 			base.TearDown();
 		}
 
+		/// <summary>
+		/// One frame: the input update, then <c>Update</c>, whose sequence is collected if it was built.
+		/// </summary>
 		void Frame(float dt = k_Dt)
 		{
 			InputSystem.Update();
-			_allLogs.AddRange(_autoTap.GetLatestLogs());
+			var builds = _autoTap.Enabled;
 			_autoTap.Update(dt);
+			if (builds)
+			{
+				_allLogs.AddRange(_autoTap.GetLatestLogs());
+			}
 		}
 
 		void RunUntilCompleted(AutoTapBase.LogItem item)

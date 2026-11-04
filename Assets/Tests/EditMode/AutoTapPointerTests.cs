@@ -48,12 +48,19 @@ namespace UnityAutoTap.Tests
 			base.TearDown();
 		}
 
+		/// <summary>
+		/// One frame: the input update, the UI, then <c>Update</c>, whose sequence is collected if it was built.
+		/// </summary>
 		void Frame(float dt = k_Dt)
 		{
 			InputSystem.Update();
-			_allLogs.AddRange(_autoTap.GetLatestLogs());
 			_scene.ProcessUi();
+			var builds = _autoTap.Enabled;
 			_autoTap.Update(dt);
+			if (builds)
+			{
+				_allLogs.AddRange(_autoTap.GetLatestLogs());
+			}
 		}
 
 		void Frames(int count)
@@ -647,18 +654,19 @@ namespace UnityAutoTap.Tests
 			var item = _autoTap.Mouse(Gesture.PressAt(TestScene.At(0.5f, 0.5f)).Hold(10f));
 			Frame();
 
-			_autoTap.Stop();
+			_autoTap.PreUpdate = _ => _autoTap.Stop();
+			Frame();
 
 			Assert.That(item.Completed, Is.True);
 			Assert.That(item.EndReason, Is.EqualTo(AutoTapBase.EndReason.Interrupted));
 			Assert.That(item.CompletedOrder, Is.Null);
 			Assert.That(item.CompletedFrameCount, Is.EqualTo(Time.frameCount));
-
-			InputSystem.Update();
 			var logs = _autoTap.GetLatestLogs().ToList();
 			Assert.That(logs.Select(e => e.Item), Is.EqualTo(new[] { item }));
 			Assert.That(logs.Single().Kind, Is.EqualTo(AutoTapBase.LogEventKind.Completed));
 			Assert.That(logs.Single().Order, Is.Null);
+
+			InputSystem.Update();
 			Assert.That(_changes.OfType<ButtonUp>().Select(c => c.ControlPath), Is.EqualTo(new[] { "leftButton" }));
 		}
 
@@ -703,11 +711,10 @@ namespace UnityAutoTap.Tests
 			Frames(4);
 			var late = _autoTap.Mouse(Gesture.PressAt(TestScene.At(0.5f, 0.5f)).Hold(5f));
 			Frame();
-			_autoTap.Stop();
+			_autoTap.PreUpdate = _ => _autoTap.Stop();
+			Frame();
 			InputSystem.Update();
-			_allLogs.AddRange(_autoTap.GetLatestLogs());
-			InputSystem.Update();
-			_allLogs.AddRange(_autoTap.GetLatestLogs());
+			Frame();
 
 			foreach (var item in new[] { finished, hover, running, late })
 			{

@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.UI;
 
 namespace UnityAutoTap
@@ -116,10 +115,9 @@ namespace UnityAutoTap
 			new Dictionary<InputDevice, DeviceBoundOperation>();
 		readonly List<Operation> _scratch = new List<Operation>();
 		readonly List<DeviceBoundOperation> _boundScratch = new List<DeviceBoundOperation>();
-		readonly List<LogEvent> _log = new List<LogEvent>();
-		readonly List<LogEvent> _logBetweenUpdates = new List<LogEvent>();
-		bool _inInputUpdate;
-		readonly List<KeyValuePair<long, LogItem>> _tail = new List<KeyValuePair<long, LogItem>>();
+		readonly List<LogEntry> _log = new List<LogEntry>();
+		readonly List<LogEntry> _pendingLog = new List<LogEntry>();
+		bool _inUpdate;
 		int _logVersion;
 		long _startSequence;
 
@@ -169,37 +167,27 @@ namespace UnityAutoTap
 			}
 
 			_slots = new FingerOperation[slotCount];
-
-			// The log is renewed by the input updates for as long as this instance exists, whether or not it is
-			// started and whichever virtual input it uses.
-			InputSystem.onBeforeUpdate += OnBeforeInputUpdate;
 		}
 
 		/// <summary>
-		/// Starts the log of the input update that begins: what happened in an earlier update is not in it, and what
-		/// happened between the updates (the reset of a device, for example) is.
+		/// Builds the log again at the start of <see cref="Update(float)"/>: what was kept since the earlier one
+		/// becomes the log, and the sequences that were returned are out of date.
 		/// </summary>
-		void OnBeforeInputUpdate()
+		void RebuildLog()
 		{
-			if (InputState.currentUpdateType != InputUpdateType.Dynamic)
-			{
-				return;
-			}
-
 			_log.Clear();
-			_log.AddRange(_logBetweenUpdates);
-			_logBetweenUpdates.Clear();
+			_log.AddRange(_pendingLog);
+			_pendingLog.Clear();
 			++_logVersion;
-			_inInputUpdate = true;
 		}
 
 		/// <summary>
-		/// Drops the log, and with it the sequences that were returned.
+		/// Drops the log and what was kept for the next one, and with them the sequences that were returned.
 		/// </summary>
 		void DiscardLog()
 		{
 			_log.Clear();
-			_logBetweenUpdates.Clear();
+			_pendingLog.Clear();
 			++_logVersion;
 		}
 
@@ -261,7 +249,6 @@ namespace UnityAutoTap
 				Stop();
 			}
 
-			InputSystem.onBeforeUpdate -= OnBeforeInputUpdate;
 			Unsubscribe();
 			_session?.Dispose();
 			_session = null;
@@ -275,7 +262,6 @@ namespace UnityAutoTap
 			_operations.Clear();
 			_fingerOperations.Clear();
 			_deviceOperations.Clear();
-			_tail.Clear();
 			DiscardLog();
 		}
 
@@ -283,6 +269,12 @@ namespace UnityAutoTap
 		/// Makes this instance <see cref="Current"/> and enables it. Calling it on the current instance does
 		/// nothing.
 		/// </summary>
+		/// <remarks>
+		/// What an earlier run kept for the log that the next <see cref="Update(float)"/> builds, such as the end of an
+		/// operation that <see cref="Stop"/> ended outside <see cref="Update(float)"/>, is discarded, so that it does
+		/// not show up in the log of this run. The sequence that <see cref="GetLatestLogs"/> returns stays what it was
+		/// until the first <see cref="Update(float)"/> of this run builds it again.
+		/// </remarks>
 		/// <exception cref="InvalidOperationException">Another instance is the current one.</exception>
 		/// <exception cref="ObjectDisposedException">This instance was disposed.</exception>
 		public void Start()
@@ -305,6 +297,8 @@ namespace UnityAutoTap
 				_input = _session;
 			}
 
+			// What an earlier run kept for the next log does not belong to this run.
+			_pendingLog.Clear();
 			Subscribe();
 			Enabled = true;
 			Current = this;
@@ -330,6 +324,14 @@ namespace UnityAutoTap
 		/// </para>
 		/// <para>
 		/// The releases reach the UI in the next input update, not inside this method.
+		/// </para>
+		/// <para>
+		/// When this method is called inside <see cref="Update(float)"/>, by a scenario for example, the ends of the
+		/// operations that it ended are in the sequence that <see cref="GetLatestLogs"/> returns for that
+		/// <see cref="Update(float)"/>. When it is called outside, they are not in any sequence: <see cref="Update(float)"/>
+		/// does nothing while this instance is not <see cref="Enabled"/>, so no log is built that could take them, and
+		/// <see cref="Start"/> discards them. For an operation that was started in a slot,
+		/// <see cref="OnTapCompleted"/> is called inside this method in either case.
 		/// </para>
 		/// </remarks>
 		/// <exception cref="InvalidOperationException">This instance is not the current one.</exception>
@@ -359,7 +361,7 @@ namespace UnityAutoTap
 
 				operation.Interrupt();
 				Complete(operation, EndReason.Interrupted, null, frame);
-				_tail.Add(new KeyValuePair<long, LogItem>(operation.StartSequence, operation.Item));
+				AppendEnd(operation);
 				if (operation.Index >= 0)
 				{
 					_slots[operation.Index] = null;
@@ -413,51 +415,72 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// Returns what happened in the latest Dynamic input update, as one sequence in the order the Input System
-		/// processed it. It is empty if nothing happened in that update.
+		/// Returns the log of the latest <see cref="Update(float)"/>: what happened since the one before it, as one
+		/// sequence in the order the Input System processed it. It is empty if nothing happened.
 		/// </summary>
 		/// <remarks>
 		/// <para>
 		/// Each element is a <see cref="LogItem"/>, what happened to it (<see cref="LogEventKind"/>) and the sequence
-		/// number of the processed change that caused it. When several things happened to one item in one input
-		/// update, they are several elements.
+		/// number of the processed change that caused it. When several things happened to one item since the earlier
+		/// <see cref="Update(float)"/>, they are several elements.
 		/// </para>
 		/// <para>
-		/// The sequence is built again at the start of each Dynamic input update, from the creation of this instance
-		/// until it is disposed: whether it is started or stopped, and whatever the state of the virtual input is.
-		/// Nothing else renews it, so the same elements are returned until the next Dynamic input update starts. An
-		/// operation is processed by the input update at the start of a frame, so it can be read in
-		/// <see cref="OnPreUpdate"/>, in <see cref="Update(int)"/>, in <see cref="OnPostUpdate"/> and after
-		/// <see cref="Update(float)"/> of that frame, until the next frame's input update.
+		/// The sequence is built again at the start of every <see cref="Update(float)"/> that runs, that is, while this
+		/// instance is <see cref="Enabled"/>. Nothing else renews it, so the same elements are returned until the next
+		/// <see cref="Update(float)"/> starts, also when frames pass without a call and after <see cref="Stop"/>.
+		/// <see cref="Dispose"/> empties it.
 		/// </para>
 		/// <para>
-		/// The sequence that is returned is valid only until the next Dynamic input update starts. Once that happened,
-		/// enumerating it, reading its <see cref="LogEventSequence.Count"/> or an element of it throws
+		/// The sequence that is returned is valid only until the next <see cref="Update(float)"/> starts. Once that
+		/// happened, enumerating it, reading its <see cref="LogEventSequence.Count"/> or an element of it throws
 		/// <see cref="InvalidOperationException"/>. Copy what is needed later (<c>ToArray()</c> of LINQ, for example).
-		/// Enumerating it with <c>foreach</c> allocates nothing.
+		/// Enumerating it with <c>foreach</c> allocates nothing. While <see cref="Update(float)"/> runs, what it causes
+		/// is added to the sequence, and a sequence that was returned earlier in the same call shows it too (see
+		/// <see cref="LogEventSequence"/>).
 		/// </para>
 		/// <para>
-		/// What happens between two input updates, such as the Input System resetting a device (which ends the
-		/// operations that use it), is not in the sequence of the update before it: it is in the sequence of the next
-		/// update, at the position of its sequence number.
+		/// Which sequence something goes into depends on whether it happens inside <see cref="Update(float)"/>:
+		/// </para>
+		/// <list type="bullet">
+		/// <item><description>
+		/// What happens outside <see cref="Update(float)"/> is kept, and becomes the start of the sequence that the next
+		/// <see cref="Update(float)"/> builds. That is what the input update at the start of a frame processed (the start
+		/// of an operation, the start of its drag, its end), and what happened since the previous
+		/// <see cref="Update(float)"/> ended, such as the Input System resetting a device after it, which ends the
+		/// operations that use it.
+		/// </description></item>
+		/// <item><description>
+		/// What happens inside <see cref="Update(float)"/>, in <see cref="OnPreUpdate"/>, <see cref="Update(int)"/>,
+		/// <see cref="OnPostUpdate"/>, <see cref="OnTapCompleted"/> and in the code that these call, is added to the
+		/// sequence at once. That is the end of an operation that <see cref="Stop"/> ended, or that a reset or the
+		/// disabling of a device ended, when it is called there. A scenario runs inside <see cref="Update(float)"/>, so
+		/// what it does is in the sequence of that call.
+		/// </description></item>
+		/// </list>
+		/// <para>
+		/// Every one of these is in one sequence only: it is not listed twice and it is not lost, with the exception in
+		/// the last paragraph.
 		/// </para>
 		/// <para>
 		/// An operation started in frame N is queued by <c>Simulate</c> and processed by the input update of frame N + 1,
-		/// so it is in the sequence of frame N + 1. The <see cref="LogItem"/> that <c>Simulate</c> returns is returned at
-		/// once, before any of this. The items in the sequence are the same objects that <c>Simulate</c> returned, and
-		/// they keep being filled in (see <see cref="LogItem"/>), so what an item shows when it is read is what is known
-		/// then, not at the time of the element.
+		/// so it is in the sequence that <see cref="Update(float)"/> builds in frame N + 1. It can be read in
+		/// <see cref="OnPreUpdate"/>, in <see cref="Update(int)"/>, in <see cref="OnPostUpdate"/> and after
+		/// <see cref="Update(float)"/> of that frame, until <see cref="Update(float)"/> of the next frame. The
+		/// <see cref="LogItem"/> that <c>Simulate</c> returns is returned at once, before any of this. The items in the
+		/// sequence are the same objects that <c>Simulate</c> returned, and they keep being filled in (see
+		/// <see cref="LogItem"/>), so what an item shows when it is read is what is known then, not at the time of the
+		/// element.
 		/// </para>
 		/// <para>
 		/// Elements are ordered by <see cref="LogEvent.Order"/>. Elements without an order come after those that
 		/// have one, in the order the operations were started. They are <see cref="LogEventKind.Completed"/> of
+		/// </para>
 		/// <list type="bullet">
 		/// <item><description>
-		/// items that were dropped (<see cref="EndReason.Dropped"/>) by that input update,
+		/// items that were dropped (<see cref="EndReason.Dropped"/>) by an input update,
 		/// </description></item>
 		/// <item><description>
-		/// items that <see cref="Stop"/> ended since the previous input update, which are put into the sequence of
-		/// the next input update because their release is processed by it, and
+		/// items that <see cref="Stop"/> ended, and
 		/// </description></item>
 		/// <item><description>
 		/// items whose end changed no control, such as a hover that presses nothing or a <c>Set</c> of the value that
@@ -465,14 +488,14 @@ namespace UnityAutoTap
 		/// plan is over.
 		/// </description></item>
 		/// </list>
-		/// </para>
 		/// <para>
-		/// The end of every <see cref="LogItem"/> that <c>Simulate</c> returned is in exactly one sequence, once the
-		/// input updates it needs have run: the update that processes its release, or the next one after
-		/// <see cref="Stop"/>.
+		/// The exception is the end of an operation that <see cref="Stop"/> ended outside <see cref="Update(float)"/>: it
+		/// is not in any sequence. No <see cref="Update(float)"/> follows that would build one, because the instance is
+		/// not <see cref="Enabled"/> any more. For an operation that was started in a slot,
+		/// <see cref="OnTapCompleted"/> is called inside <see cref="Stop"/>.
 		/// </para>
 		/// </remarks>
-		/// <returns>The sequence of the latest input update.</returns>
+		/// <returns>The sequence of the latest <see cref="Update(float)"/>.</returns>
 		public LogEventSequence GetLatestLogs()
 		{
 			return new LogEventSequence(this, _logVersion);
@@ -486,6 +509,10 @@ namespace UnityAutoTap
 		/// The work is done in this order:
 		/// </para>
 		/// <list type="number">
+		/// <item><description>
+		/// The sequence that <see cref="GetLatestLogs"/> returns is built again: what happened outside this method
+		/// since the previous call becomes the log, and the sequences that were returned are out of date.
+		/// </description></item>
 		/// <item><description><see cref="OnPreUpdate"/>.</description></item>
 		/// <item><description>
 		/// <see cref="OnTapCompleted"/> for the slot operations that ended, in the order of
@@ -500,6 +527,11 @@ namespace UnityAutoTap
 		/// </description></item>
 		/// <item><description><see cref="OnPostUpdate"/>.</description></item>
 		/// </list>
+		/// <para>
+		/// What happens while this method runs and ends an operation (<see cref="Stop"/>, a reset of a device) is added
+		/// to the sequence of this call at once. Nothing is built again while the instance is not
+		/// <see cref="Enabled"/>.
+		/// </para>
 		/// </remarks>
 		/// <param name="deltaTime">The time since the previous call, in seconds.</param>
 		public void Update(float deltaTime)
@@ -509,6 +541,21 @@ namespace UnityAutoTap
 				return;
 			}
 
+			RebuildLog();
+			var wasInUpdate = _inUpdate;
+			_inUpdate = true;
+			try
+			{
+				RunUpdate(deltaTime);
+			}
+			finally
+			{
+				_inUpdate = wasInUpdate;
+			}
+		}
+
+		void RunUpdate(float deltaTime)
+		{
 			OnPreUpdate(deltaTime);
 			if (!Enabled)
 			{

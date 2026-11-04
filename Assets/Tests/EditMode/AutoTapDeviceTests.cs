@@ -47,12 +47,19 @@ namespace UnityAutoTap.Tests
 			base.TearDown();
 		}
 
+		/// <summary>
+		/// One frame: the input update, the UI, then <c>Update</c>, whose sequence is collected if it was built.
+		/// </summary>
 		void Frame(float dt = k_Dt)
 		{
 			InputSystem.Update();
-			_allLogs.AddRange(_autoTap.GetLatestLogs());
 			_scene.ProcessUi();
+			var builds = _autoTap.Enabled;
 			_autoTap.Update(dt);
+			if (builds)
+			{
+				_allLogs.AddRange(_autoTap.GetLatestLogs());
+			}
 		}
 
 		void Frames(int count)
@@ -723,16 +730,17 @@ namespace UnityAutoTap.Tests
 			Frames(2);
 			Assert.That(Gamepad.current.buttonSouth.isPressed, Is.True);
 
-			_autoTap.Stop();
+			_autoTap.PreUpdate = _ => _autoTap.Stop();
+			Frame();
 
 			Assert.That(item.Completed, Is.True);
 			Assert.That(item.EndReason, Is.EqualTo(AutoTapBase.EndReason.Interrupted));
 			Assert.That(item.CompletedOrder, Is.Null);
-			InputSystem.Update();
 			var logs = _autoTap.GetLatestLogs().ToList();
 			Assert.That(logs.Select(e => e.Item), Is.EqualTo(new[] { item }));
 			Assert.That(logs[0].Kind, Is.EqualTo(AutoTapBase.LogEventKind.Completed));
 			Assert.That(logs[0].Order, Is.Null);
+			InputSystem.Update();
 			Assert.That(_changes.OfType<ButtonUp>().Select(c => c.ControlPath), Is.EqualTo(new[] { "buttonSouth" }));
 			Assert.That(Gamepad.current.leftStick.ReadUnprocessedValue(), Is.EqualTo(Vector2.zero));
 		}
@@ -777,11 +785,10 @@ namespace UnityAutoTap.Tests
 			Frames(5);
 			var late = _autoTap.Key(Key.C, 5f);
 			Frame();
-			_autoTap.Stop();
+			_autoTap.PreUpdate = _ => _autoTap.Stop();
+			Frame();
 			InputSystem.Update();
-			_allLogs.AddRange(_autoTap.GetLatestLogs());
-			InputSystem.Update();
-			_allLogs.AddRange(_autoTap.GetLatestLogs());
+			Frame();
 
 			foreach (var item in new[] { finished, timedOut, running, late })
 			{

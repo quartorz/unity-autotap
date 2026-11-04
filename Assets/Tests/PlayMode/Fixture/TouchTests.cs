@@ -272,11 +272,12 @@ namespace UnityAutoTap.Tests
 		}
 
 		[UnityTest]
-		public IEnumerator Stop_EndsRunningOperationsWithoutANumber_AndListsTheirEndsLastInTheNextInputUpdate()
+		public IEnumerator Stop_EndsRunningOperationsWithoutANumber_AndListsTheirEndsLastInTheSequenceOfThatUpdate()
 		{
-			// Stop ends what is running at once, and no processed change ended it, so CompletedOrder stays null. The
-			// releases are processed by the next input update, whose sequence lists those ends, without a number, in the
-			// order the operations were started; each end is listed once (documented on AutoTapBase.GetLatestLogs).
+			// Stop ends what is running at once, and no processed change ended it, so CompletedOrder stays null. Stop is
+			// called inside Update here, so the ends are in the sequence of that Update, without a number, in the order the
+			// operations were started; each end is listed once (documented on AutoTapBase.GetLatestLogs). The releases are
+			// processed by the next input update, which no sequence takes.
 			yield return BuildRig();
 			var a = Rig.AddButton("A", Rig.Cell(0, 1));
 			var b = Rig.AddButton("B", Rig.Cell(2, 1));
@@ -292,8 +293,12 @@ namespace UnityAutoTap.Tests
 			});
 			yield return Until(() => first.Order.HasValue && second.Order.HasValue, "both presses to be processed");
 
-			var stopFrame = Frame;
-			Auto.Stop();
+			var stopFrame = 0;
+			yield return Step(() =>
+			{
+				stopFrame = Frame;
+				Auto.Stop();
+			});
 
 			foreach (var item in new[] { first, second })
 			{
@@ -304,51 +309,54 @@ namespace UnityAutoTap.Tests
 				Assert.That(item.Order, Is.Not.Null, "the press had been processed before Stop");
 			}
 
-			yield return Step();
-
 			var logs = LatestLogs();
 			Assert.That(logs.Select(l => (l.Item, l.Kind, l.Order)), Is.EqualTo(new[]
 			{
 				(first, LogEventKind.Completed, (long?)null),
 				(second, LogEventKind.Completed, (long?)null),
 			}), Describe(logs));
+
+			yield return Step();
+
 			Assert.That(Rig.Log.CountOf("pointerUp", a.gameObject), Is.EqualTo(1));
 			Assert.That(Rig.Log.CountOf("pointerUp", b.gameObject), Is.EqualTo(1));
 			Assert.That(first.CompletedOrder, Is.Null, "what the release caused is not attributed to an item that Stop ended");
-
-			yield return Step();
-			Assert.That(LatestLogs(), Is.Empty, "the end of an item is listed once");
+			Assert.That(LatestLogs(), Is.EqualTo(logs), "the end of an item is listed once: no Update builds a sequence again");
 		}
 
 		[UnityTest]
-		public IEnumerator Stop_BeforeThePressWasProcessed_LeavesOrderNull_AndTheEndIsListedInTheNextInputUpdate()
+		public IEnumerator Stop_BeforeThePressWasProcessed_LeavesOrderNull_AndTheEndIsListedInTheSequenceOfThatUpdate()
 		{
-			// Simulate and Stop in one frame: the press and the release that Stop queued are processed together by the next
-			// input update. The operation was cut off by then, so the processed press is not attributed to it and Order
-			// stays null; its end is listed without a number in that update's sequence.
+			// Simulate and Stop in one Update: the press and the release that Stop queued are processed together by the
+			// next input update. The operation was cut off by then, so the processed press is not attributed to it and Order
+			// stays null; its end is listed without a number in the sequence of the Update that called Stop.
 			yield return BuildRig();
 			var button = Rig.AddButton("Button", Rig.Cell(1, 1));
 			yield return Settle();
 			StartAuto();
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.SimulateTap(0, Rig.Center(button.gameObject), 5f));
+			yield return Step(() =>
+			{
+				item = Auto.SimulateTap(0, Rig.Center(button.gameObject), 5f);
+				Auto.Stop();
+			});
 			Assert.That(item, Is.Not.Null);
-			Auto.Stop();
 
 			Assert.That(item.Completed, Is.True);
 			Assert.That(item.EndReason, Is.EqualTo(EndReason.Interrupted));
 			Assert.That(item.Order, Is.Null);
 			Assert.That(Auto.CompletedSlots.Select(c => c.Index), Is.EqualTo(new[] { 0 }));
+			var logs = LatestLogs();
+			Assert.That(logs.Select(l => (l.Item, l.Kind, l.Order)), Is.EqualTo(new[] { (item, LogEventKind.Completed, (long?)null) }),
+				Describe(logs));
 
 			yield return Step();
 
 			Assert.That(item.Order, Is.Null, "the press was processed after the operation was cut off");
 			Assert.That(item.StartedFrameCount, Is.Zero);
 			Assert.That(item.CompletedOrder, Is.Null);
-			var logs = LatestLogs();
-			Assert.That(logs.Select(l => (l.Item, l.Kind, l.Order)), Is.EqualTo(new[] { (item, LogEventKind.Completed, (long?)null) }),
-				Describe(logs));
+			Assert.That(LatestLogs(), Is.EqualTo(logs), "and nothing was added to the sequence");
 			Assert.That(Rig.Log.CountOf("pointerDown", button.gameObject), Is.EqualTo(1), "the queued press is processed anyway");
 			Assert.That(Rig.Log.CountOf("pointerUp", button.gameObject), Is.EqualTo(1), "and so is the release");
 		}

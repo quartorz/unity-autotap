@@ -13,8 +13,9 @@ using UnityEngine.Profiling;
 namespace UnityAutoTap.Tests
 {
 	/// <summary>
-	/// What <see cref="AutoTapBase.GetLatestLogs"/> returns: the log of the latest Dynamic input update, built again
-	/// by each one, and a sequence that allocates nothing and is valid only until the next one.
+	/// What <see cref="AutoTapBase.GetLatestLogs"/> returns: the log of the latest <c>Update</c>, built again by each
+	/// one that runs, and a sequence that allocates nothing and is valid only until the next one. What happens inside
+	/// <c>Update</c> is in the log of that call, and what happens outside it is in the log of the next.
 	/// </summary>
 	public class AutoTapLatestLogsTests : InputTestFixture
 	{
@@ -68,34 +69,84 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void TheSequenceIsBuiltAgainByEachInputUpdate()
+		public void TheSequenceIsBuiltAgainByEveryUpdate()
 		{
 			var item = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 0.1f);
 			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "nothing was processed yet");
 
 			InputSystem.Update();
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "the input update does not build the sequence");
+
+			_autoTap.Update(k_Dt);
 			var started = _autoTap.GetLatestLogs();
 			Assert.That(Kinds(started), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Started }));
 			Assert.That(started[0].Item, Is.SameAs(item));
 
-			InputSystem.Update();
-			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "the second update processed nothing");
+			Frame();
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "nothing happened since the update before");
 			Assert.That(_autoTap.GetLatestLogs(), Is.Empty);
 		}
 
 		[Test]
-		public void TheSequenceStaysTheSameUntilTheNextInputUpdate()
+		public void AnUpdateThatFollowsAnotherWithoutAnInputUpdateHasAnEmptySequence()
 		{
 			_autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
 			InputSystem.Update();
+			_autoTap.Update(k_Dt);
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.EqualTo(1));
+
+			_autoTap.Update(k_Dt);
+
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "what happened is in the sequence of the first one only");
+		}
+
+		[Test]
+		public void TheSequenceStaysTheSameUntilTheNextUpdate()
+		{
+			var item = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), k_Dt);
+			Frame();
+			Assert.That(item.Completed, Is.False, "the release is queued");
 
 			var before = _autoTap.GetLatestLogs().ToList();
-			_autoTap.Update(k_Dt);
-			_autoTap.Update(k_Dt);
+			InputSystem.Update();
+			InputSystem.Update();
 			var after = _autoTap.GetLatestLogs().ToList();
 
-			Assert.That(before, Has.Count.EqualTo(1));
-			Assert.That(after, Is.EqualTo(before));
+			Assert.That(item.Completed, Is.True, "the input update processed the release");
+			Assert.That(before.Select(e => e.Kind), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Started }));
+			Assert.That(after, Is.EqualTo(before), "and it is not in the sequence yet");
+
+			_autoTap.Update(k_Dt);
+
+			Assert.That(Kinds(_autoTap.GetLatestLogs()), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Completed }));
+		}
+
+		[Test]
+		public void WhatHappensWhileUpdateIsNotCalledIsInTheNextSequence()
+		{
+			var first = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 0f);
+			var second = _autoTap.Tap(1, TestScene.At(0.4f, 0.2f), 0f);
+			Frame();
+			Assert.That(Kinds(_autoTap.GetLatestLogs()), Is.EqualTo(new[]
+			{
+				AutoTapBase.LogEventKind.Started,
+				AutoTapBase.LogEventKind.Started,
+			}));
+
+			// Two frames without a call of Update: the releases are processed, and nothing else happens.
+			InputSystem.Update();
+			InputSystem.Update();
+			var third = _autoTap.Tap(2, TestScene.At(0.6f, 0.2f), 5f);
+			InputSystem.Update();
+			_autoTap.Update(k_Dt);
+
+			var logs = _autoTap.GetLatestLogs().ToList();
+			Assert.That(logs.Select(e => (e.Item, e.Kind)), Is.EqualTo(new[]
+			{
+				(first, AutoTapBase.LogEventKind.Completed),
+				(second, AutoTapBase.LogEventKind.Completed),
+				(third, AutoTapBase.LogEventKind.Started),
+			}), "everything that happened since the previous Update, once each");
 		}
 
 		[Test]
@@ -106,12 +157,11 @@ namespace UnityAutoTap.Tests
 			var kinds = new List<AutoTapBase.LogEventKind>();
 			for (var i = 0; i < 20 && !item.Completed; ++i)
 			{
-				InputSystem.Update();
+				Frame();
 				kinds.AddRange(Kinds(_autoTap.GetLatestLogs()));
-				_autoTap.Update(k_Dt);
 			}
 
-			InputSystem.Update();
+			Frame();
 			kinds.AddRange(Kinds(_autoTap.GetLatestLogs()));
 
 			Assert.That(kinds, Is.EqualTo(new[]
@@ -127,7 +177,7 @@ namespace UnityAutoTap.Tests
 		{
 			var first = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
 			var second = _autoTap.Tap(1, TestScene.At(0.4f, 0.2f), 1f);
-			InputSystem.Update();
+			Frame();
 
 			var logs = _autoTap.GetLatestLogs();
 
@@ -164,16 +214,19 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void ASequenceOfAnEarlierInputUpdateThrowsWhenItIsUsed()
+		public void ASequenceOfAnEarlierUpdateThrowsWhenItIsUsed()
 		{
 			_autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
-			InputSystem.Update();
+			Frame();
 			var old = _autoTap.GetLatestLogs();
 			var enumerator = old.GetEnumerator();
 			Assert.That(enumerator.MoveNext(), Is.True);
 			Assert.That(old.Count, Is.EqualTo(1));
 
 			InputSystem.Update();
+			Assert.That(old.Count, Is.EqualTo(1), "an input update does not make it out of date");
+
+			_autoTap.Update(k_Dt);
 
 			Assert.Throws<InvalidOperationException>(() => { foreach (var _ in old) { } });
 			Assert.Throws<InvalidOperationException>(() => old.GetEnumerator());
@@ -188,23 +241,23 @@ namespace UnityAutoTap.Tests
 		public void ASequenceThrowsEvenWhenTheNewOneIsEmptyAndTheOldOneWasToo()
 		{
 			// The version tells that the log was built again, not that it holds something else.
-			InputSystem.Update();
+			Frame();
 			var empty = _autoTap.GetLatestLogs();
 			Assert.That(empty.Count, Is.Zero);
 
-			InputSystem.Update();
+			Frame();
 
 			Assert.Throws<InvalidOperationException>(() => { var _ = empty.Count; });
 		}
 
 		[Test]
-		public void ACopyOutlivesTheInputUpdate()
+		public void ACopyOutlivesTheUpdate()
 		{
 			var item = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
-			InputSystem.Update();
+			Frame();
 
 			var copy = _autoTap.GetLatestLogs().ToArray();
-			InputSystem.Update();
+			Frame();
 
 			Assert.That(copy, Has.Length.EqualTo(1));
 			Assert.That(copy[0].Item, Is.SameAs(item));
@@ -212,78 +265,82 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void AnEditorInputUpdateDoesNotBuildTheSequenceAgain()
+		public void NoInputUpdateBuildsTheSequenceAgain()
 		{
 			_autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
-			InputSystem.Update();
+			Frame();
 			var logs = _autoTap.GetLatestLogs();
 
+			InputSystem.Update();
 			UpdateOfType(InputUpdateType.Editor);
+			InputSystem.Update();
 
 			Assert.That(logs.Count, Is.EqualTo(1));
 		}
 
 		[Test]
-		public void TheSequenceIsRenewedWhileTheAutoTapIsNotStarted()
+		public void TheSequenceIsNotBuiltAgainWhileTheAutoTapIsNotEnabled()
 		{
 			_autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
-			InputSystem.Update();
-			Assert.That(_autoTap.GetLatestLogs().Count, Is.EqualTo(1));
+			Frame();
+			var logs = _autoTap.GetLatestLogs();
+			Assert.That(logs.Count, Is.EqualTo(1));
 			_autoTap.Stop();
 
-			// The release that Stop queued is processed and ends the item; nothing is left of the earlier update.
-			InputSystem.Update();
-			Assert.That(Kinds(_autoTap.GetLatestLogs()), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Completed }));
-			for (var i = 0; i < 10; ++i)
+			// Update does nothing, so there is no sequence that could take the end of what Stop ended.
+			for (var i = 0; i < 5; ++i)
 			{
-				InputSystem.Update();
-				Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, $"update {i} after the end");
+				Frame();
 			}
+
+			Assert.That(logs.Count, Is.EqualTo(1), "it was not built again, so the sequence is still valid");
+			Assert.That(Kinds(_autoTap.GetLatestLogs()), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Started }));
 		}
 
 		[Test]
-		public void NoOldSequenceRemainsAfterTheVirtualInputWasGivenUp()
+		public void TheSequenceStaysWhenTheVirtualInputWasGivenUp()
 		{
-			// The virtual devices are removed a few input updates after Stop released what was pressed. From then on
-			// the virtual input raises nothing any more, and the sequence is still renewed.
+			// The virtual devices are removed a few input updates after Stop released what was pressed. The sequence of
+			// the last Update is the latest one all the same: nothing renews it, and nothing is added to it.
 			_autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
-			InputSystem.Update();
-			Assert.That(_autoTap.GetLatestLogs().Count, Is.EqualTo(1));
+			Frame();
+			var logs = _autoTap.GetLatestLogs();
+			Assert.That(logs.Count, Is.EqualTo(1));
 			_autoTap.Stop();
 
 			for (var i = 0; i < 20 && InputSystem.devices.Any(VirtualInput.IsVirtual); ++i)
 			{
-				InputSystem.Update();
+				Frame();
 			}
 
 			Assert.That(InputSystem.devices.Any(VirtualInput.IsVirtual), Is.False, "the virtual devices are gone");
-			InputSystem.Update();
-			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero);
-			InputSystem.Update();
-			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero);
+			Frame();
+			Assert.That(logs.Count, Is.EqualTo(1));
+			Assert.That(Kinds(_autoTap.GetLatestLogs()), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Started }));
 		}
 
 		[Test]
-		public void TheSequenceOfAnInstanceThatHoldsNoSessionIsBuiltAgainToo()
+		public void AnInstanceThatWasNeverStartedBuildsNoSequence()
 		{
-			// An instance that was created but never started has no virtual input to hear from.
+			// Update does nothing for an instance that is not enabled, so there is nothing to build.
 			using (var idle = new TestAutoTap())
 			{
 				Assert.That(idle.GetLatestLogs().Count, Is.Zero);
 				var logs = idle.GetLatestLogs();
 
 				InputSystem.Update();
+				idle.Update(k_Dt);
 
-				Assert.Throws<InvalidOperationException>(() => { var _ = logs.Count; });
+				Assert.That(logs.Count, Is.Zero, "still valid");
 				Assert.That(idle.GetLatestLogs().Count, Is.Zero);
 			}
 		}
 
 		[Test]
-		public void AResetBetweenTwoInputUpdatesIsInTheSequenceOfTheNextOne()
+		public void AResetBetweenTwoUpdatesIsInTheSequenceOfTheNextOne()
 		{
 			var item = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
-			InputSystem.Update();
+			Frame();
 			Assert.That(Kinds(_autoTap.GetLatestLogs()), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Started }));
 
 			InputSystem.ResetDevice(Touchscreen.current);
@@ -293,20 +350,265 @@ namespace UnityAutoTap.Tests
 				"the sequence is still that of the update before");
 
 			InputSystem.Update();
+			Assert.That(Kinds(_autoTap.GetLatestLogs()), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Started }),
+				"and an input update does not change it");
+
+			_autoTap.Update(k_Dt);
 
 			var logs = _autoTap.GetLatestLogs();
 			Assert.That(Kinds(logs), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Completed }));
 			Assert.That(logs[0].Item, Is.SameAs(item));
 			Assert.That(logs[0].Order, Is.EqualTo(item.CompletedOrder));
-			InputSystem.Update();
+			Frame();
 			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "and in no other");
+		}
+
+		[Test]
+		public void AResetInsideUpdateIsInThatSequenceAndInNoOther()
+		{
+			var item = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
+			Frame();
+			_autoTap.PreUpdate = dt =>
+			{
+				_autoTap.PreUpdate = null;
+				InputSystem.ResetDevice(Touchscreen.current);
+			};
+
+			Frame();
+
+			Assert.That(item.Completed, Is.True);
+			var logs = _autoTap.GetLatestLogs();
+			Assert.That(Kinds(logs), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Completed }));
+			Assert.That(logs[0].Item, Is.SameAs(item));
+			Assert.That(logs[0].Order, Is.EqualTo(item.CompletedOrder));
+			Frame();
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "not in the sequence of the next update");
+		}
+
+		[Test]
+		public void AResetOfAKeyboardInsideUpdateIsInThatSequenceAndInNoOther()
+		{
+			var item = _autoTap.Key(Key.A, 5f);
+			Frame();
+			Assert.That(Keyboard.current.aKey.isPressed, Is.True);
+			_autoTap.PreUpdate = dt =>
+			{
+				_autoTap.PreUpdate = null;
+				InputSystem.ResetDevice(Keyboard.current);
+			};
+
+			Frame();
+
+			Assert.That(item.Completed, Is.True);
+			Assert.That(item.EndReason, Is.EqualTo(AutoTapBase.EndReason.Interrupted));
+			var logs = _autoTap.GetLatestLogs();
+			Assert.That(Kinds(logs), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Completed }));
+			Assert.That(logs[0].Item, Is.SameAs(item));
+			Frame();
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "not in the sequence of the next update");
+		}
+
+		[Test]
+		public void DisablingADeviceInsideUpdateEndsTheOperationsInThatSequence()
+		{
+			var item = _autoTap.Mouse(Gesture.PressAt(TestScene.At(0.5f, 0.5f)).Hold(5f));
+			Frame();
+			Assert.That(Mouse.current.leftButton.isPressed, Is.True);
+			_autoTap.PreUpdate = dt =>
+			{
+				_autoTap.PreUpdate = null;
+				InputSystem.DisableDevice(Mouse.current);
+			};
+
+			Frame();
+
+			Assert.That(item.Completed, Is.True);
+			var logs = _autoTap.GetLatestLogs();
+			Assert.That(Kinds(logs), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Completed }));
+			Assert.That(logs[0].Item, Is.SameAs(item));
+			Frame();
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "not in the sequence of the next update");
+		}
+
+		[Test]
+		public void StopInsideUpdateIsInThatSequenceInTheOrderTheOperationsWereStartedAndInNoOther()
+		{
+			var finger = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 5f);
+			var key = _autoTap.Key(Key.A, 5f);
+			var mouse = _autoTap.Mouse(Gesture.PressAt(TestScene.At(0.5f, 0.5f)).Hold(5f));
+			Frame();
+			_autoTap.PreUpdate = dt => _autoTap.Stop();
+
+			Frame();
+
+			var logs = _autoTap.GetLatestLogs();
+			Assert.That(logs.Select(e => e.Item), Is.EqualTo(new[] { finger, key, mouse }));
+			Assert.That(logs.Select(e => e.Kind), Is.All.EqualTo(AutoTapBase.LogEventKind.Completed));
+			Assert.That(logs.Select(e => e.Order), Is.All.Null);
+
+			// What Stop released is processed by the next input update; no update builds a sequence after it.
+			InputSystem.Update();
+			Frame();
+			Assert.That(_autoTap.GetLatestLogs().ToList(), Is.EqualTo(logs.ToList()));
+
+			// The next run does not list them either.
+			_autoTap.Start();
+			Frame();
+			Frame();
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "not in the sequence of a later Update");
+		}
+
+		[Test]
+		public void StopOutsideUpdateIsInNoSequenceAndNotInTheOnesOfTheNextRun()
+		{
+			var finger = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 5f);
+			var key = _autoTap.Key(Key.A, 5f);
+			Frame();
+
+			_autoTap.Stop();
+			Assert.That(finger.Completed, Is.True);
+			Assert.That(key.Completed, Is.True);
+			Frame();
+			_autoTap.Start();
+			var all = new List<AutoTapBase.LogEvent>();
+			var next = _autoTap.Tap(1, TestScene.At(0.4f, 0.2f), 5f);
+			for (var i = 0; i < 5; ++i)
+			{
+				Frame();
+				all.AddRange(_autoTap.GetLatestLogs());
+			}
+
+			Assert.That(all.Any(e => e.Item == finger || e.Item == key), Is.False, "nothing of the earlier run");
+			Assert.That(all.Select(e => (e.Item, e.Kind)), Is.EqualTo(new[] { (next, AutoTapBase.LogEventKind.Started) }));
+		}
+
+		[Test]
+		public void EveryEndIsInOneSequenceOnly()
+		{
+			var all = new List<AutoTapBase.LogEvent>();
+
+			void Collect()
+			{
+				// An Update that does nothing builds no sequence, and the one that is there was collected already.
+				var builds = _autoTap.Enabled;
+				Frame();
+				if (builds)
+				{
+					all.AddRange(_autoTap.GetLatestLogs());
+				}
+			}
+
+			var finished = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 0f);
+			var resetBetween = _autoTap.Key(Key.A, 5f);
+			var resetInside = _autoTap.Mouse(Gesture.PressAt(TestScene.At(0.5f, 0.5f)).Hold(5f));
+			var stopped = _autoTap.Tap(2, TestScene.At(0.6f, 0.2f), 5f);
+			Collect();
+			Collect();
+
+			// Between two updates.
+			InputSystem.ResetDevice(Keyboard.current);
+			var dropped = _autoTap.Gamepad(new ControlSequence().Press(GamepadButton.South).Hold(5f));
+			InputSystem.DisableDevice(Gamepad.current);
+			Collect();
+
+			// Inside an update.
+			_autoTap.PreUpdate = dt =>
+			{
+				_autoTap.PreUpdate = null;
+				InputSystem.ResetDevice(Mouse.current);
+			};
+			Collect();
+
+			// By Stop inside an update.
+			_autoTap.PreUpdate = dt => _autoTap.Stop();
+			Collect();
+			InputSystem.Update();
+			Collect();
+
+			foreach (var item in new[] { finished, resetBetween, resetInside, stopped, dropped })
+			{
+				Assert.That(item.Completed, Is.True, item.ToString());
+				var ends = all.Count(e => e.Item == item && e.Kind == AutoTapBase.LogEventKind.Completed);
+				Assert.That(ends, Is.EqualTo(1), $"{item.Kind} {item.Index} {item.EndReason}");
+				Assert.That(all.Count(e => e.Item == item && e.Kind == AutoTapBase.LogEventKind.Started), Is.LessThanOrEqualTo(1));
+			}
+		}
+
+		[Test]
+		public void AnEndThatIsAddedInsideUpdateTakesItsPlaceByTheOrder()
+		{
+			var running = _autoTap.Key(Key.A, 5f);
+			Frame();
+
+			// Dropped by the input update of the next frame, which is outside Update: it has no number, and is kept.
+			var dropped = _autoTap.Mouse(Gesture.PressAt(TestScene.At(0.5f, 0.5f)).Hold(5f));
+			InputSystem.DisableDevice(Mouse.current);
+			_autoTap.PreUpdate = dt =>
+			{
+				_autoTap.PreUpdate = null;
+				InputSystem.ResetDevice(Keyboard.current);
+			};
+
+			Frame();
+
+			var logs = _autoTap.GetLatestLogs().ToList();
+			Assert.That(dropped.EndReason, Is.EqualTo(AutoTapBase.EndReason.Dropped));
+			Assert.That(logs.Select(e => e.Item), Is.EqualTo(new[] { running, dropped }),
+				"the end that has a number comes before the one that has none, although it was added later");
+			Assert.That(logs[0].Order, Is.Not.Null);
+			Assert.That(logs[1].Order, Is.Null);
+		}
+
+		[Test]
+		public void WhatIsAddedInsideUpdateDoesNotMakeASequenceThatWasReceivedOutOfDate()
+		{
+			_autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 5f);
+			_autoTap.Tap(1, TestScene.At(0.4f, 0.2f), 5f);
+			Frame();
+			var third = _autoTap.Tap(2, TestScene.At(0.6f, 0.2f), 5f);
+			var visited = new List<(AutoTapBase.LogItem Item, AutoTapBase.LogEventKind Kind)>();
+			var counts = new List<int>();
+			_autoTap.PreUpdate = dt =>
+			{
+				_autoTap.PreUpdate = null;
+				var logs = _autoTap.GetLatestLogs();
+				counts.Add(logs.Count);
+				var enumerator = logs.GetEnumerator();
+				Assert.That(enumerator.MoveNext(), Is.True);
+				visited.Add((enumerator.Current.Item, enumerator.Current.Kind));
+
+				// The reset ends the three operations, which are added to the sequence that was received.
+				InputSystem.ResetDevice(Touchscreen.current);
+
+				counts.Add(logs.Count);
+				while (enumerator.MoveNext())
+				{
+					visited.Add((enumerator.Current.Item, enumerator.Current.Kind));
+				}
+
+				Assert.That(logs[logs.Count - 1].Kind, Is.EqualTo(AutoTapBase.LogEventKind.Completed));
+			};
+
+			Frame();
+
+			Assert.That(counts, Is.EqualTo(new[] { 1, 4 }), "the count is that of the time it is read");
+			Assert.That(visited.Select(v => v.Kind), Is.EqualTo(new[]
+			{
+				AutoTapBase.LogEventKind.Started,
+				AutoTapBase.LogEventKind.Completed,
+				AutoTapBase.LogEventKind.Completed,
+				AutoTapBase.LogEventKind.Completed,
+			}), "the enumeration that was running visits what was added");
+			Assert.That(visited[0].Item, Is.SameAs(third));
+			var after = _autoTap.GetLatestLogs();
+			Assert.That(after.Count, Is.EqualTo(4), "and it is the sequence that is returned afterwards");
 		}
 
 		[Test]
 		public void DisposeEmptiesTheSequenceAndOutdatesTheOnesThatWereReturned()
 		{
 			_autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
-			InputSystem.Update();
+			Frame();
 			var logs = _autoTap.GetLatestLogs();
 			Assert.That(logs.Count, Is.EqualTo(1));
 
@@ -314,18 +616,19 @@ namespace UnityAutoTap.Tests
 
 			Assert.Throws<InvalidOperationException>(() => { var _ = logs.Count; });
 			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero);
-			InputSystem.Update();
+			Frame();
 			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero);
 		}
 
 		[Test]
-		public void ADisposedInstanceNoLongerHearsTheInputUpdates()
+		public void ADisposedInstanceBuildsNoSequence()
 		{
 			var other = new TestAutoTap();
 			other.Dispose();
 			var logs = other.GetLatestLogs();
 
 			InputSystem.Update();
+			other.Update(k_Dt);
 
 			Assert.That(logs.Count, Is.Zero, "the version of a disposed instance does not change any more");
 		}
@@ -338,13 +641,14 @@ namespace UnityAutoTap.Tests
 				_autoTap.Tap(i, TestScene.At(0.1f + 0.2f * i, 0.2f), 1f);
 			}
 
-			InputSystem.Update();
+			Frame();
 			var logs = _autoTap.GetLatestLogs();
 			Assert.That(logs.Count, Is.EqualTo(3));
 			const int rounds = 4000;
 
 			// Allocation of the Mono heap is what is measured. The enumeration through IEnumerable boxes the enumerator,
-			// which makes sure that the measurement sees an allocation at all.
+			// which makes sure that the measurement sees an allocation at all. A collection that runs in the middle of a
+			// measurement hides what was allocated before it, so it is the largest of the runs that must show it.
 			var boxedBytes = MeasureAllocation(() =>
 			{
 				var count = 0;
@@ -357,7 +661,7 @@ namespace UnityAutoTap.Tests
 				}
 
 				return count;
-			});
+			}, useLargest: true);
 			Assert.That(boxedBytes, Is.GreaterThan(rounds * 16), "the measurement sees allocations");
 
 			var foreachBytes = MeasureAllocation(() =>
@@ -397,9 +701,10 @@ namespace UnityAutoTap.Tests
 		/// <summary>
 		/// The number of bytes that the Mono heap grew by while <paramref name="work"/> ran: the median of several runs,
 		/// so that a collection that shrinks the heap in one of them, or an allocation of another thread, does not
-		/// decide the result.
+		/// decide the result. <paramref name="useLargest"/> takes the largest of the runs instead, for what has to be seen
+		/// in at least one of them.
 		/// </summary>
-		static long MeasureAllocation(Func<int> work)
+		static long MeasureAllocation(Func<int> work, bool useLargest = false)
 		{
 			work(); // warm up
 			var results = new List<long>();
@@ -413,7 +718,7 @@ namespace UnityAutoTap.Tests
 			}
 
 			results.Sort();
-			return results[results.Count / 2];
+			return useLargest ? results[results.Count - 1] : results[results.Count / 2];
 		}
 	}
 }

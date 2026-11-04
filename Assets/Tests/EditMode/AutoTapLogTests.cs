@@ -43,16 +43,18 @@ namespace UnityAutoTap.Tests
 			base.TearDown();
 		}
 
+		/// <summary>
+		/// One frame: the input update, then <c>Update</c>, whose sequence is collected if it was built.
+		/// </summary>
 		void Frame(float dt = k_Dt)
 		{
 			InputSystem.Update();
-			CollectLogs();
+			var builds = _autoTap.Enabled;
 			_autoTap.Update(dt);
-		}
-
-		void CollectLogs()
-		{
-			_allLogs.AddRange(_autoTap.GetLatestLogs());
+			if (builds)
+			{
+				_allLogs.AddRange(_autoTap.GetLatestLogs());
+			}
 		}
 
 		List<AutoTapBase.LogEvent> Logs()
@@ -81,7 +83,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void TheLogOfAnInputUpdateWithoutChangesIsEmpty()
+		public void TheLogOfAnUpdateInWhichNothingHappenedIsEmpty()
 		{
 			_autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
 			Frame();
@@ -171,12 +173,13 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void StopEndsARunningOperationAsInterruptedAndReportsItOnceInTheNextInputUpdate()
+		public void StopInsideUpdateEndsARunningOperationAsInterruptedAndListsTheEndInThatUpdate()
 		{
 			var item = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
 			Frame();
 
-			_autoTap.Stop();
+			_autoTap.PreUpdate = dt => _autoTap.Stop();
+			Frame();
 
 			Assert.That(item.Completed, Is.True);
 			Assert.That(item.EndReason, Is.EqualTo(AutoTapBase.EndReason.Interrupted));
@@ -185,46 +188,91 @@ namespace UnityAutoTap.Tests
 			Assert.That(_autoTap.Completed.Select(p => p.Value), Is.EqualTo(new[] { item }), "reported from inside Stop");
 			Assert.That(AutoTapBase.Current, Is.Null);
 			Assert.That(_autoTap.Enabled, Is.False);
-
-			InputSystem.Update();
 			var logs = Logs();
-			InputSystem.Update();
-			var after = Logs();
-
 			Assert.That(logs, Has.Count.EqualTo(1));
 			Assert.That(logs[0].Item, Is.SameAs(item));
 			Assert.That(logs[0].Kind, Is.EqualTo(AutoTapBase.LogEventKind.Completed));
 			Assert.That(logs[0].Order, Is.Null);
-			Assert.That(after, Is.Empty);
+
+			InputSystem.Update();
+			Frame();
+
+			Assert.That(Logs(), Is.EqualTo(logs), "nothing renews the sequence any more");
+			Assert.That(_allLogs.Count(e => e.Item == item && e.Kind == AutoTapBase.LogEventKind.Completed), Is.EqualTo(1));
+			Assert.That(_changes.OfType<TouchEnded>().Count(), Is.EqualTo(1), "the release reached the Input System");
+		}
+
+		[Test]
+		public void StopOutsideUpdateEndsARunningOperationAsInterruptedAndListsTheEndNowhere()
+		{
+			var item = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
+			Frame();
+			var before = Logs();
+
+			_autoTap.Stop();
+
+			Assert.That(item.Completed, Is.True);
+			Assert.That(item.EndReason, Is.EqualTo(AutoTapBase.EndReason.Interrupted));
+			Assert.That(item.CompletedOrder, Is.Null);
+			Assert.That(item.CompletedFrameCount, Is.EqualTo(Time.frameCount));
+			Assert.That(_autoTap.Completed.Select(p => p.Value), Is.EqualTo(new[] { item }), "reported from inside Stop");
+			Assert.That(_autoTap.GetLatestLogs().ToList(), Is.EqualTo(before), "the sequence is the one of the last Update");
+
+			Frame();
+			Frame();
+
+			Assert.That(_autoTap.GetLatestLogs().ToList(), Is.EqualTo(before));
+			Assert.That(_allLogs.Any(e => e.Item == item && e.Kind == AutoTapBase.LogEventKind.Completed), Is.False);
 			Assert.That(_changes.OfType<TouchEnded>().Count(), Is.EqualTo(1), "the release reached the Input System");
 		}
 
 		[Test]
 		public void StopBeforeThePressWasProcessedPressesAndReleasesInOneInputUpdate()
 		{
-			var item = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
+			AutoTapBase.LogItem item = null;
+			_autoTap.PreUpdate = dt =>
+			{
+				item = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
+				_autoTap.Stop();
+			};
+			Frame();
+			Assert.That(Logs().Select(e => e.Kind), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Completed }));
 
-			_autoTap.Stop();
 			InputSystem.Update();
 
 			Assert.That(item.EndReason, Is.EqualTo(AutoTapBase.EndReason.Interrupted));
 			Assert.That(_changes.OfType<TouchBegan>().Count(), Is.EqualTo(1));
 			Assert.That(_changes.OfType<TouchEnded>().Count(), Is.EqualTo(1));
-			Assert.That(Logs().Select(e => e.Kind), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Completed }));
+			Assert.That(Logs().Select(e => e.Item), Is.EqualTo(new[] { item }), "the end is listed once");
 		}
 
 		[Test]
-		public void StopWhileTheReleaseIsQueuedStillReportsTheEndInTheNextInputUpdate()
+		public void StopWhileTheReleaseIsQueuedStillListsTheEndInThatUpdate()
 		{
 			var item = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 0f);
-			Frame(); // the press is processed and the release is queued
+			_autoTap.OnEmptySlot = index =>
+			{
+				// Slot 0 was visited before slot 1: its press was processed by the input update of this frame, so the
+				// plan was carried out and the release was queued.
+				if (index == 1 && _autoTap.Enabled)
+				{
+					_autoTap.Stop();
+				}
+			};
 
-			_autoTap.Stop();
-			InputSystem.Update();
+			Frame();
 
 			Assert.That(item.EndReason, Is.EqualTo(AutoTapBase.EndReason.Interrupted));
+			var logs = Logs();
+			Assert.That(logs.Select(e => e.Kind), Is.EqualTo(new[]
+			{
+				AutoTapBase.LogEventKind.Started,
+				AutoTapBase.LogEventKind.Completed,
+			}));
+			Assert.That(logs.Select(e => e.Item), Is.All.SameAs(item));
+			InputSystem.Update();
 			Assert.That(_changes.OfType<TouchEnded>().Count(), Is.EqualTo(1), "the queued release reached the Input System");
-			Assert.That(Logs().Select(e => e.Item), Is.EqualTo(new[] { item }));
+			Assert.That(Logs(), Is.EqualTo(logs), "and the sequence is the same");
 		}
 
 		[Test]
@@ -235,8 +283,8 @@ namespace UnityAutoTap.Tests
 			var third = _autoTap.Tap(1, TestScene.At(0.6f, 0.2f), 1f);
 			Frame();
 
-			_autoTap.Stop();
-			InputSystem.Update();
+			_autoTap.PreUpdate = dt => _autoTap.Stop();
+			Frame();
 
 			var logs = Logs();
 			Assert.That(logs.Select(e => e.Item), Is.EqualTo(new[] { first, second, third }));
@@ -273,11 +321,10 @@ namespace UnityAutoTap.Tests
 			var late = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
 			Frame();
 			Frame();
-			_autoTap.Stop();
+			_autoTap.PreUpdate = dt => _autoTap.Stop();
+			Frame();
 			InputSystem.Update();
-			CollectLogs();
-			InputSystem.Update();
-			CollectLogs();
+			Frame();
 
 			var reasons = new[] { finished, interrupted, dropped, late }.Select(i => i.EndReason).ToArray();
 			Assert.That(reasons, Is.EqualTo(new[]
@@ -354,13 +401,15 @@ namespace UnityAutoTap.Tests
 			InputSystem.DisableDevice(Touchscreen.current);
 			var dropped = _autoTap.Tap(2, TestScene.At(0.6f, 0.2f), 1f);
 
-			_autoTap.Stop();
-			InputSystem.Update();
+			// The two that were running ended when the device was disabled, which is a processed change; the press of
+			// the third is dropped, so it has no order.
+			_autoTap.PreUpdate = dt => _autoTap.Stop();
+			Frame();
 
-			// Everything was dropped by the disabled device; nothing here has an order.
 			var logs = Logs();
 			Assert.That(logs.Select(e => e.Item), Is.EqualTo(new[] { processed, move, dropped }));
 			Assert.That(logs.Select(e => e.Kind), Is.All.EqualTo(AutoTapBase.LogEventKind.Completed));
+			Assert.That(logs.Select(e => e.Order.HasValue), Is.EqualTo(new[] { true, true, false }));
 		}
 
 		[Test]

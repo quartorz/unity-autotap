@@ -636,14 +636,14 @@ namespace UnityAutoTap
 						if (finger.Dropped)
 						{
 							Complete(operation, EndReason.Dropped, null, frame);
-							_tail.Add(new KeyValuePair<long, LogItem>(operation.StartSequence, operation.Item));
+							AppendEnd(operation);
 							continue;
 						}
 
 						if (finger.ReleaseLost)
 						{
 							Complete(operation, EndReason.Interrupted, null, frame);
-							_tail.Add(new KeyValuePair<long, LogItem>(operation.StartSequence, operation.Item));
+							AppendEnd(operation);
 							continue;
 						}
 					}
@@ -654,7 +654,7 @@ namespace UnityAutoTap
 					if (bound.EventsLost)
 					{
 						Complete(bound, bound.EventsProcessed ? EndReason.Interrupted : EndReason.Dropped, null, frame);
-						_tail.Add(new KeyValuePair<long, LogItem>(operation.StartSequence, operation.Item));
+						AppendEnd(operation);
 						anyEnded = true;
 						continue;
 					}
@@ -705,7 +705,7 @@ namespace UnityAutoTap
 					}
 					else
 					{
-						_tail.Add(new KeyValuePair<long, LogItem>(operation.StartSequence, operation.Item));
+						AppendEnd(operation);
 					}
 
 					anyEnded = true;
@@ -733,23 +733,6 @@ namespace UnityAutoTap
 			{
 				_operations.RemoveAll(o => o.Index < 0 && o.Ended);
 			}
-
-			SortLogByOrder();
-
-			// Operations that ended without a processed change come after the ones that have an order, in the
-			// order they were started.
-			if (_tail.Count > 0)
-			{
-				_tail.Sort((a, b) => a.Key.CompareTo(b.Key));
-				foreach (var pair in _tail)
-				{
-					_log.Add(new LogEvent(pair.Value, LogEventKind.Completed, null));
-				}
-
-				_tail.Clear();
-			}
-
-			_inInputUpdate = false;
 		}
 
 		/// <summary>
@@ -774,27 +757,39 @@ namespace UnityAutoTap
 			}
 		}
 
+		/// <summary>
+		/// Adds what happened to an item that has a sequence number.
+		/// </summary>
 		void AppendLog(LogItem item, LogEventKind kind, long order)
 		{
-			// What happens outside an input update is told by the next one.
-			(_inInputUpdate ? _log : _logBetweenUpdates).Add(new LogEvent(item, kind, order));
+			Append(new LogEntry(new LogEvent(item, kind, order), 0));
 		}
 
-		void SortLogByOrder()
+		/// <summary>
+		/// Adds the end of an operation that has no sequence number: it ended without a processed change.
+		/// </summary>
+		void AppendEnd(Operation operation)
 		{
-			// A stable insertion sort; the list is as long as the number of operations of one input update.
-			for (var i = 1; i < _log.Count; ++i)
-			{
-				var current = _log[i];
-				var j = i - 1;
-				while (j >= 0 && _log[j].Order.GetValueOrDefault() > current.Order.GetValueOrDefault())
-				{
-					_log[j + 1] = _log[j];
-					--j;
-				}
+			Append(new LogEntry(new LogEvent(operation.Item, LogEventKind.Completed, null), operation.StartSequence));
+		}
 
-				_log[j + 1] = current;
+		/// <summary>
+		/// Puts an element into the log if <see cref="Update(float)"/> is running, and otherwise keeps it for the log
+		/// that the next <see cref="Update(float)"/> builds. Either way it takes its place by the sequence number.
+		/// </summary>
+		void Append(LogEntry entry)
+		{
+			var list = _inUpdate ? _log : _pendingLog;
+
+			// A stable insertion; the list is as long as the number of operations that ended in one frame, and an
+			// element that belongs at the end, which is the usual one, is not moved.
+			var index = list.Count;
+			while (index > 0 && entry.ComesBefore(list[index - 1]))
+			{
+				--index;
 			}
+
+			list.Insert(index, entry);
 		}
 
 		/// <summary>
