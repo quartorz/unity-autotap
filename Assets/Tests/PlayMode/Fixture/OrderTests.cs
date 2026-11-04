@@ -113,9 +113,9 @@ namespace UnityAutoTap.Tests
 		}
 
 		[UnityTest]
-		public IEnumerator O1_KeyFingerScroll_FiredInOneFrame_AreStartedInThatOrderInGetLatestLogs()
+		public IEnumerator O1_KeyFingerScroll_SimulatedInOneFrame_AreStartedInThatOrderInGetLatestLogs()
 		{
-			// The same, through the auto tap: GetLatestLogs lists Started in the order the operations were fired, and
+			// The same, through the auto tap: GetLatestLogs lists Started in the order the operations were started, and
 			// each element carries the number of the change that started the item.
 			yield return BuildRig();
 			var button = Rig.AddButton("Button", Rig.Cell(1, 1));
@@ -128,9 +128,9 @@ namespace UnityAutoTap.Tests
 			LogItem scroll = null;
 			yield return Step(() =>
 			{
-				key = Auto.FireKeyPress(Key.A, 0.25f);
-				tap = Auto.FireTap(0, Rig.Center(button.gameObject), 0.25f);
-				scroll = Auto.FireScrollAt(Rig.Center(button.gameObject), new Vector2(0f, 1f));
+				key = Auto.SimulateKeyPress(Key.A, 0.25f);
+				tap = Auto.SimulateTap(0, Rig.Center(button.gameObject), 0.25f);
+				scroll = Auto.SimulateScrollAt(Rig.Center(button.gameObject), new Vector2(0f, 1f));
 			});
 			Assert.That(key, Is.Not.Null);
 			Assert.That(tap, Is.Not.Null);
@@ -174,10 +174,10 @@ namespace UnityAutoTap.Tests
 			LogItem key = null;
 			yield return Step(() =>
 			{
-				tap = Auto.FireTap(0, Rig.Center(tapButton.gameObject), 0.25f);
-				drag = Auto.FireFinger(1, Gesture.PressAt(Rig.Center(source)).MoveTo(Rig.Center(zone), 0.4f));
-				mouse = Auto.FireMouseGesture(Gesture.PressAt(Rig.Center(mouseButton.gameObject)).Hold(0.25f));
-				key = Auto.FireKeyPress(Key.Space, 0.35f);
+				tap = Auto.SimulateTap(0, Rig.Center(tapButton.gameObject), 0.25f);
+				drag = Auto.SimulateGesture(1, Gesture.PressAt(Rig.Center(source)).MoveTo(Rig.Center(zone), 0.4f));
+				mouse = Auto.SimulateMouseGesture(Gesture.PressAt(Rig.Center(mouseButton.gameObject)).Hold(0.25f));
+				key = Auto.SimulateKeyPress(Key.Space, 0.35f);
 			});
 			var items = new[] { tap, drag, mouse, key };
 			Assert.That(items, Is.All.Not.Null);
@@ -225,7 +225,7 @@ namespace UnityAutoTap.Tests
 
 			var firstFrame = LogTrace.Where(t => t.Event.Kind == LogEventKind.Started && t.Frame == tap.StartedFrameCount)
 				.Select(t => t.Event.Item);
-			Assert.That(firstFrame, Is.EqualTo(new[] { tap, drag, mouse, key }), "started in the order they were fired");
+			Assert.That(firstFrame, Is.EqualTo(new[] { tap, drag, mouse, key }), "started in the order of the calls");
 		}
 
 		[UnityTest]
@@ -295,8 +295,8 @@ namespace UnityAutoTap.Tests
 			LogItem key = null;
 			yield return Step(() =>
 			{
-				tap = Auto.FireTap(0, Rig.Center(button.gameObject), 5f);
-				key = Auto.FireKeyPress(Key.Space, 5f);
+				tap = Auto.SimulateTap(0, Rig.Center(button.gameObject), 5f);
+				key = Auto.SimulateKeyPress(Key.Space, 5f);
 			});
 			yield return Until(() => tap.Order.HasValue && key.Order.HasValue, "both presses to be processed");
 
@@ -329,7 +329,7 @@ namespace UnityAutoTap.Tests
 			var foreignIds = Enumerable.Range(200, 9).ToArray();
 			yield return Step(() =>
 			{
-				first = Auto.FireTap(0, point, 0.35f);
+				first = Auto.SimulateTap(0, point, 0.35f);
 				var touchscreen = (Touchscreen)first.Device;
 				foreach (var id in foreignIds)
 				{
@@ -342,12 +342,12 @@ namespace UnityAutoTap.Tests
 					});
 				}
 
-				eleventh = Auto.FireTap(1, point, 0.35f);
+				eleventh = Auto.SimulateTap(1, point, 0.35f);
 			});
 			Assert.That(first, Is.Not.Null);
 			if (eleventh == null)
 			{
-				Assert.Inconclusive("Fire refused the second finger, because the touches of the test are counted as fingers in use.");
+				Assert.Inconclusive("Simulate refused the second finger, because the touches of the test are counted as fingers in use.");
 			}
 
 			yield return Step();
@@ -446,7 +446,7 @@ namespace UnityAutoTap.Tests
 			raw.Items.Clear();
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireKeyPress(Key.Space, 0.25f));
+			yield return Step(() => item = Auto.SimulateKeyPress(Key.Space, 0.25f));
 			Assert.That(item, Is.Not.Null);
 			yield return Step();
 

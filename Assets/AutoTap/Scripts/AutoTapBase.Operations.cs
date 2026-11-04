@@ -15,11 +15,11 @@ namespace UnityAutoTap
 		/// </summary>
 		abstract class Operation
 		{
-			protected Operation(int index, LogItem item, long fireSequence)
+			protected Operation(int index, LogItem item, long startSequence)
 			{
 				Index = index;
 				Item = item;
-				FireSequence = fireSequence;
+				StartSequence = startSequence;
 			}
 
 			/// <summary>
@@ -28,7 +28,7 @@ namespace UnityAutoTap
 			public int Index { get; }
 
 			public LogItem Item { get; }
-			public long FireSequence { get; }
+			public long StartSequence { get; }
 
 			/// <summary>
 			/// Why the operation ends, once it was decided to end it. <c>null</c> before that.
@@ -84,12 +84,12 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// One operation of a finger in a slot: what <c>Fire(index, ...)</c> starts.
+		/// One operation of a finger in a slot: what <c>Simulate(index, gesture)</c> starts.
 		/// </summary>
 		sealed class FingerOperation : Operation, IGestureTarget
 		{
-			public FingerOperation(int index, LogItem item, long fireSequence, VirtualFinger finger, Gesture gesture, int stepCount)
-				: base(index, item, fireSequence)
+			public FingerOperation(int index, LogItem item, long startSequence, VirtualFinger finger, Gesture gesture, int stepCount)
+				: base(index, item, startSequence)
 			{
 				Finger = finger;
 				Runner = new GestureRunner(gesture, stepCount, this);
@@ -151,8 +151,8 @@ namespace UnityAutoTap
 		/// </summary>
 		abstract class DeviceBoundOperation : Operation
 		{
-			protected DeviceBoundOperation(LogItem item, long fireSequence, VirtualDevice device)
-				: base(-1, item, fireSequence)
+			protected DeviceBoundOperation(LogItem item, long startSequence, VirtualDevice device)
+				: base(-1, item, startSequence)
 			{
 				Device = device;
 			}
@@ -230,14 +230,14 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// One operation of a pointer device other than a touchscreen: what <see cref="FirePointer"/> starts.
+		/// One operation of a pointer device other than a touchscreen: what <c>Simulate</c> of a pointer starts.
 		/// </summary>
 		sealed class PointerOperation : DeviceBoundOperation, IGestureTarget
 		{
 			readonly List<ButtonControl> _pressed = new List<ButtonControl>();
 
-			public PointerOperation(LogItem item, long fireSequence, VirtualPointer pointer, Gesture gesture, int stepCount)
-				: base(item, fireSequence, pointer)
+			public PointerOperation(LogItem item, long startSequence, VirtualPointer pointer, Gesture gesture, int stepCount)
+				: base(item, startSequence, pointer)
 			{
 				Pointer = pointer;
 				Runner = new GestureRunner(gesture, stepCount, this);
@@ -374,7 +374,7 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// One operation of a device that has no position: what <see cref="FireDevice"/> starts.
+		/// One operation of a device that has no position: what <c>Simulate</c> of a device that has no position starts.
 		/// </summary>
 		sealed class DeviceOperation : DeviceBoundOperation, ISequenceTarget
 		{
@@ -382,9 +382,9 @@ namespace UnityAutoTap
 			readonly Dictionary<ControlSequence.Step, ButtonControl> _buttons;
 
 			public DeviceOperation(
-				LogItem item, long fireSequence, VirtualDevice device, ControlSequence sequence,
+				LogItem item, long startSequence, VirtualDevice device, ControlSequence sequence,
 				Dictionary<ControlSequence.Step, ButtonControl> buttons)
-				: base(item, fireSequence, device)
+				: base(item, startSequence, device)
 			{
 				_buttons = buttons;
 				Runner = new SequenceRunner(sequence, this);
@@ -588,14 +588,14 @@ namespace UnityAutoTap
 						if (finger.Dropped)
 						{
 							Complete(operation, EndReason.Dropped, null, frame);
-							_tail.Add(new KeyValuePair<long, LogItem>(operation.FireSequence, operation.Item));
+							_tail.Add(new KeyValuePair<long, LogItem>(operation.StartSequence, operation.Item));
 							continue;
 						}
 
 						if (finger.ReleaseLost)
 						{
 							Complete(operation, EndReason.Interrupted, null, frame);
-							_tail.Add(new KeyValuePair<long, LogItem>(operation.FireSequence, operation.Item));
+							_tail.Add(new KeyValuePair<long, LogItem>(operation.StartSequence, operation.Item));
 							continue;
 						}
 					}
@@ -606,7 +606,7 @@ namespace UnityAutoTap
 					if (bound.EventsLost)
 					{
 						Complete(bound, bound.EventsProcessed ? EndReason.Interrupted : EndReason.Dropped, null, frame);
-						_tail.Add(new KeyValuePair<long, LogItem>(operation.FireSequence, operation.Item));
+						_tail.Add(new KeyValuePair<long, LogItem>(operation.StartSequence, operation.Item));
 						anyEnded = true;
 						continue;
 					}
@@ -657,7 +657,7 @@ namespace UnityAutoTap
 					}
 					else
 					{
-						_tail.Add(new KeyValuePair<long, LogItem>(operation.FireSequence, operation.Item));
+						_tail.Add(new KeyValuePair<long, LogItem>(operation.StartSequence, operation.Item));
 					}
 
 					anyEnded = true;
@@ -684,7 +684,7 @@ namespace UnityAutoTap
 			SortLogByOrder();
 
 			// Operations that ended without a processed change come after the ones that have an order, in the
-			// order they were fired.
+			// order they were started.
 			if (_tail.Count > 0)
 			{
 				_tail.Sort((a, b) => a.Key.CompareTo(b.Key));
@@ -802,7 +802,7 @@ namespace UnityAutoTap
 			{
 				var order = a.Item.CompletedOrder.GetValueOrDefault(long.MaxValue)
 					.CompareTo(b.Item.CompletedOrder.GetValueOrDefault(long.MaxValue));
-				return order != 0 ? order : a.FireSequence.CompareTo(b.FireSequence);
+				return order != 0 ? order : a.StartSequence.CompareTo(b.StartSequence);
 			});
 
 			var ended = _scratch.ToArray();

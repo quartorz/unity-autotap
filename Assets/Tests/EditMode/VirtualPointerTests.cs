@@ -47,6 +47,31 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
+		public void ATypeAndTheNameOfItsLayoutGiveTheSamePointer()
+		{
+			var mouse = _session.GetPointer<Mouse>();
+			var pen = _session.GetPointer("Pen");
+
+			Assert.That(_session.GetPointer("Mouse"), Is.SameAs(mouse), "added by the type, given by the name");
+			Assert.That(_session.GetPointer("mouse"), Is.SameAs(mouse), "layout names do not depend on the case");
+			Assert.That(_session.GetPointer<Pen>(), Is.SameAs(pen), "added by the name, given by the type");
+			Assert.That(_session.GetPointer<Mouse>(1), Is.SameAs(_session.GetPointer("Mouse", 1)));
+			Assert.That(_session.GetPointer<Mouse>(1), Is.Not.SameAs(mouse));
+			Assert.That(mouse.Device, Is.InstanceOf<Mouse>());
+			Assert.That(mouse.Device.name, Is.EqualTo("AutoTap-Mouse-0"));
+			Assert.That(VirtualInput.IsVirtual(mouse.Device), Is.True);
+			Assert.That(InputSystem.devices.Count(VirtualInput.IsVirtual), Is.EqualTo(3), "Mouse 0, Mouse 1 and Pen 0");
+		}
+
+		[Test]
+		public void ATouchscreenTypeIsRefusedAndNothingIsLeftBehind()
+		{
+			Assert.Throws<ArgumentException>(() => _session.GetPointer<Touchscreen>());
+
+			Assert.That(InputSystem.devices, Is.Empty);
+		}
+
+		[Test]
 		public void OnlyPointersCanBeGivenAndNothingIsLeftBehindWhenItFails()
 		{
 			Assert.Throws<ArgumentException>(() => _session.GetPointer("Touchscreen"));

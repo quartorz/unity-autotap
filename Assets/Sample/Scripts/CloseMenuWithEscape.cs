@@ -24,7 +24,7 @@ namespace Sample
 		/// </description></item>
 		/// </list>
 		/// <para>
-		/// A key is not a pointer, so it does not use a slot: <c>FireKey</c> returns the record of the operation, and the
+		/// A key is not a pointer, so it does not use a slot: <c>Simulate(Key)</c> returns the record of the operation, and the
 		/// scenario waits for <see cref="AutoTapBase.LogItem.Completed"/> by itself. The tap that opens the menu does use
 		/// a slot, so it is made in slot 0 and the scenario works only there.
 		/// </para>
@@ -103,7 +103,7 @@ namespace Sample
 						// The menu disables the event system while it slides in, so the key waits until it ended.
 						if (menu.Opened)
 						{
-							_escape = FireKey(Key.Escape, 0.1f);
+							_escape = Simulate(Key.Escape, 0.1f);
 							if (_escape != null)
 							{
 								_phase = Phase.WaitForClosed;

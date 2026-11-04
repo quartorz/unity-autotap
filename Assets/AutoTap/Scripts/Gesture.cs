@@ -7,7 +7,8 @@ namespace UnityAutoTap
 {
 	/// <summary>
 	/// The plan of one pointer: a finger of a touchscreen, a mouse, a pen, or any other pointer device. Passed to
-	/// <see cref="AutoTapBase.Fire(int, Gesture)"/> or <see cref="AutoTapBase.FirePointer"/>.
+	/// <see cref="AutoTapBase.Simulate(int, Gesture)"/>, <see cref="AutoTapBase.Simulate{TDevice}(Gesture, int)"/> or
+	/// <see cref="AutoTapBase.Simulate(string, Gesture, int)"/>.
 	/// </summary>
 	/// <remarks>
 	/// <para>
@@ -18,21 +19,21 @@ namespace UnityAutoTap
 	/// </para>
 	/// <para>
 	/// The same plan is used for fingers, mice and pens because the input module handles the three in the same way.
-	/// What differs is which controls exist, and that is checked when the gesture is fired: a gesture that does not
-	/// fit the pointer it is fired on makes <c>Fire</c> throw <see cref="ArgumentException"/>. In particular
+	/// What differs is which controls exist, and that is checked when the gesture is simulated: a gesture that does not
+	/// fit the pointer it is simulated on makes <c>Simulate</c> throw <see cref="ArgumentException"/>. In particular
 	/// <see cref="HoverAt"/>, <see cref="Scroll"/> and buttons other than the primary one cannot be used with a
 	/// finger.
 	/// </para>
 	/// <para>
-	/// <c>Fire</c> carries out the first step and every step after it that takes no time, up to the first step that
-	/// takes time (a move or a change that takes seconds, a hold that has to wait). Each of them is an event of its own, queued in the
-	/// order of the plan, so one input update processes them all. The other steps are carried out in the following
+	/// <c>Simulate</c> carries out the first step and every step after it that takes no time, up to the first step
+	/// that takes time (a move or a change that takes seconds, a hold that has to wait). Each of them is an event of
+	/// its own, queued in the order of the plan, so one input update processes them all. The other steps are carried out in the following
 	/// frames, once the first step was processed. A button is never pressed and released by the same input update: a
 	/// release that follows a press with no time in between is made in the next frame. A pen is in range from the first
 	/// step until the end of the gesture.
 	/// </para>
 	/// <para>
-	/// A gesture must not be modified after it was passed to a <c>Fire</c> method.
+	/// A gesture must not be modified after it was passed to a <c>Simulate</c> method.
 	/// </para>
 	/// </remarks>
 	public sealed class Gesture
@@ -89,7 +90,7 @@ namespace UnityAutoTap
 
 		/// <summary>
 		/// Starts a gesture by moving the pointer to <paramref name="position"/> without pressing anything. The UI
-		/// there is hovered. It cannot be fired on a finger.
+		/// there is hovered. It cannot be used with a finger.
 		/// </summary>
 		/// <param name="position">The position in screen pixels.</param>
 		public static Gesture HoverAt(Vector2 position)
@@ -150,7 +151,7 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// Scrolls once, at the current position. It cannot be fired on a finger.
+		/// Scrolls once, at the current position. It cannot be used with a finger.
 		/// </summary>
 		/// <param name="delta">The amount, in the unit of the <c>scroll</c> control of the device.</param>
 		public Gesture Scroll(Vector2 delta)
@@ -274,7 +275,7 @@ namespace UnityAutoTap
 						break;
 					default:
 						throw new ArgumentException(
-							$"A finger cannot do '{step.Kind}'. Use FirePointer for hovering, scrolling and buttons.",
+							$"A finger cannot do '{step.Kind}'. Hovering, scrolling and buttons need a pointer such as a mouse or a pen.",
 							nameof(Steps));
 				}
 			}

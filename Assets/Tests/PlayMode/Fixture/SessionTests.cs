@@ -100,23 +100,23 @@ namespace UnityAutoTap.Tests
 		}
 
 		[UnityTest]
-		public IEnumerator Fire_WithAPlanThatDoesNotFitTheTarget_ThrowsAndStartsNothing()
+		public IEnumerator Simulate_WithAPlanThatDoesNotFitTheTarget_ThrowsAndStartsNothing()
 		{
-			// A gesture that does not fit its target is a usage error (documented on Gesture and on the Fire methods): a
+			// A gesture that does not fit its target is a usage error (documented on Gesture and on the Simulate methods): a
 			// hover or a scroll cannot be done by a finger, nor can a control that the device does not have, a pointer
-			// layout given to FireDevice, and so on.
+			// layout given to a ControlSequence, and so on.
 			yield return BuildRig();
 			StartAuto();
-			Assert.Throws<ArgumentException>(() => Auto.FireFinger(0, Gesture.HoverAt(new Vector2(100f, 100f))));
-			Assert.Throws<ArgumentException>(() => Auto.FireFinger(0, Gesture.PressAt(new Vector2(100f, 100f)).Scroll(Vector2.up)));
-			Assert.Throws<ArgumentException>(() => Auto.FireFinger(0, Gesture.PressAt(new Vector2(100f, 100f), "rightButton")));
-			Assert.Throws<ArgumentException>(() => Auto.FirePointerGesture("Touchscreen", Gesture.HoverAt(new Vector2(100f, 100f))));
-			Assert.Throws<ArgumentException>(() => Auto.FireDeviceSequence("Mouse", new ControlSequence().Press("leftButton")));
-			Assert.Throws<ArgumentException>(() => Auto.FireDeviceSequence("Keyboard", new ControlSequence().Press("noSuchKey")));
+			Assert.Throws<ArgumentException>(() => Auto.SimulateGesture(0, Gesture.HoverAt(new Vector2(100f, 100f))));
+			Assert.Throws<ArgumentException>(() => Auto.SimulateGesture(0, Gesture.PressAt(new Vector2(100f, 100f)).Scroll(Vector2.up)));
+			Assert.Throws<ArgumentException>(() => Auto.SimulateGesture(0, Gesture.PressAt(new Vector2(100f, 100f), "rightButton")));
+			Assert.Throws<ArgumentException>(() => Auto.SimulatePointerGesture("Touchscreen", Gesture.HoverAt(new Vector2(100f, 100f))));
+			Assert.Throws<ArgumentException>(() => Auto.SimulateDeviceSequence("Mouse", new ControlSequence().Press("leftButton")));
+			Assert.Throws<ArgumentException>(() => Auto.SimulateDeviceSequence("Keyboard", new ControlSequence().Press("noSuchKey")));
 			yield return Steps(2);
 
 			LogItem tap = null;
-			yield return Step(() => tap = Auto.FireTap(0, new Vector2(100f, 100f), 0f));
+			yield return Step(() => tap = Auto.SimulateTap(0, new Vector2(100f, 100f), 0f));
 			Assert.That(tap, Is.Not.Null, "the slot was not taken by the failed calls");
 			yield return Until(() => tap.Completed, "the tap to end");
 		}
@@ -207,7 +207,7 @@ namespace UnityAutoTap.Tests
 
 			StartAuto(useSession: false);
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireTap(0, Rig.Center(button.gameObject), 0f));
+			yield return Step(() => item = Auto.SimulateTap(0, Rig.Center(button.gameObject), 0f));
 			yield return Until(() => item.Completed, "the tap to end");
 			yield return Steps(2);
 			Assert.That(button.ClickCount, Is.EqualTo(1), "the tap arrived although the player had no focus");

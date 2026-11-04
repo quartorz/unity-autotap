@@ -64,7 +64,7 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireMouseGesture(Gesture.PressAt(Rig.Center(button.gameObject), buttonPath).Hold(0.2f)));
+			yield return Step(() => item = Auto.SimulateMouseGesture(Gesture.PressAt(Rig.Center(button.gameObject), buttonPath).Hold(0.2f)));
 			Assert.That(item, Is.Not.Null);
 			yield return Until(() => item.Completed, "the press to end");
 			yield return Steps(1);
@@ -104,7 +104,7 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireMouseGesture(Gesture.PressAt(Rig.Center(button.gameObject)).Hold(0.2f)));
+			yield return Step(() => item = Auto.SimulateMouseGesture(Gesture.PressAt(Rig.Center(button.gameObject)).Hold(0.2f)));
 			yield return Until(() => item.Completed, "the press to end");
 
 			Assert.That(Rig.Log.First("pointerDown", button.gameObject).Button, Is.EqualTo(PointerEventData.InputButton.Left));
@@ -134,11 +134,11 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem forward = null;
-			yield return Step(() => forward = Auto.FireMouseGesture(Gesture.PressAt(Rig.Center(button.gameObject), "forwardButton").Hold(0.2f)));
+			yield return Step(() => forward = Auto.SimulateMouseGesture(Gesture.PressAt(Rig.Center(button.gameObject), "forwardButton").Hold(0.2f)));
 			yield return Until(() => forward.Completed, "the press to end");
 
 			LogItem back = null;
-			yield return Step(() => back = Auto.FireMouseGesture(Gesture.PressAt(Rig.Center(button.gameObject), "backButton").Hold(0.2f)));
+			yield return Step(() => back = Auto.SimulateMouseGesture(Gesture.PressAt(Rig.Center(button.gameObject), "backButton").Hold(0.2f)));
 			yield return Until(() => back.Completed, "the press to end");
 			yield return Steps(1);
 
@@ -160,7 +160,7 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireMouseGesture(
+			yield return Step(() => item = Auto.SimulateMouseGesture(
 				Gesture.PressAt(Rig.Center(source), "rightButton").MoveTo(Rig.Center(zone), 0.4f)));
 			yield return Until(() => item.Completed, "the drag to end");
 			yield return Steps(1);
@@ -199,9 +199,9 @@ namespace UnityAutoTap.Tests
 			LogItem pen = null;
 			yield return Step(() =>
 			{
-				finger = Auto.FireFinger(0, Gesture.PressAt(Rig.Center(a)).Hold(0.45f));
-				mouse = Auto.FireMouseGesture(Gesture.PressAt(Rig.Center(b)).Hold(0.45f));
-				pen = Auto.FirePenGesture(Gesture.PressAt(Rig.Center(c)).Hold(0.45f));
+				finger = Auto.SimulateGesture(0, Gesture.PressAt(Rig.Center(a)).Hold(0.45f));
+				mouse = Auto.SimulateMouseGesture(Gesture.PressAt(Rig.Center(b)).Hold(0.45f));
+				pen = Auto.SimulatePenGesture(Gesture.PressAt(Rig.Center(c)).Hold(0.45f));
 				Set(testMouse.position, Rig.Center(d));
 				Press(testMouse.leftButton);
 			});
@@ -307,11 +307,11 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem finger = null;
-			yield return Step(() => finger = Auto.FireTap(0, Rig.Center(button.gameObject), 1.05f));
+			yield return Step(() => finger = Auto.SimulateTap(0, Rig.Center(button.gameObject), 1.05f));
 			yield return Until(() => finger.Order.HasValue, "the press to be processed");
 
 			LogItem scroll = null;
-			yield return Step(() => scroll = Auto.FireScrollAt(Rig.EmptyPoint, new Vector2(0f, -1f)));
+			yield return Step(() => scroll = Auto.SimulateScrollAt(Rig.EmptyPoint, new Vector2(0f, -1f)));
 			Assert.That(scroll, Is.Not.Null);
 			yield return Steps(3);
 			Assert.That(finger.Completed, Is.False, "the finger is still down");
@@ -339,7 +339,7 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem hover = null;
-			yield return Step(() => hover = Auto.FirePenGesture(Gesture.HoverAt(Rig.Center(first.gameObject)).Hold(0.2f)));
+			yield return Step(() => hover = Auto.SimulatePenGesture(Gesture.HoverAt(Rig.Center(first.gameObject)).Hold(0.2f)));
 			Assert.That(hover, Is.Not.Null);
 			yield return Until(() => hover.Order.HasValue, "the hover to be processed");
 			var pen = (Pen)hover.Device;
@@ -354,7 +354,7 @@ namespace UnityAutoTap.Tests
 			Assert.That(first.CurrentState, Is.EqualTo("Highlighted"));
 
 			LogItem move = null;
-			yield return Step(() => move = Auto.FirePenGesture(Gesture.HoverAt(Rig.Center(second.gameObject)).Hold(0.2f)));
+			yield return Step(() => move = Auto.SimulatePenGesture(Gesture.HoverAt(Rig.Center(second.gameObject)).Hold(0.2f)));
 			yield return Until(() => move.Completed, "the second hover to end");
 			Assert.That(Rig.Log.CountOf("pointerExit", first.gameObject), Is.EqualTo(1));
 			Assert.That(Rig.Log.CountOf("pointerEnter", second.gameObject), Is.EqualTo(1));
@@ -373,7 +373,7 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FirePenGesture(
+			yield return Step(() => item = Auto.SimulatePenGesture(
 				Gesture.HoverAt(Rig.Center(target)).Set("pressure", 0.75f).Press().Hold(0.2f)));
 			yield return Until(() => item.Completed, "the press to end");
 
@@ -399,9 +399,9 @@ namespace UnityAutoTap.Tests
 
 			var before = scroll.content.anchoredPosition.y;
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireScrollAt(Rig.Center(scroll.gameObject), new Vector2(0f, -3f)));
+			yield return Step(() => item = Auto.SimulateScrollAt(Rig.Center(scroll.gameObject), new Vector2(0f, -3f)));
 			Assert.That(item, Is.Not.Null);
-			Assert.That(scroll.content.anchoredPosition.y, Is.EqualTo(before), "nothing moved inside Fire");
+			Assert.That(scroll.content.anchoredPosition.y, Is.EqualTo(before), "nothing moved inside Simulate");
 
 			yield return Until(() => Rig.Log.CountOf("scroll", scroll.gameObject) > 0, "the scroll to be delivered");
 
@@ -413,7 +413,7 @@ namespace UnityAutoTap.Tests
 			Assert.That(call, Is.Not.Null, Rig.Log.ToString());
 			// The hover that puts the pointer over the ScrollRect and the scroll are two events of one input update, and
 			// the scroll needs no frame of waiting: the pointer enters the ScrollRect first and the scroll follows in the
-			// first frame after Fire, which is also the frame in which the mouse was added to the module.
+			// first frame after Simulate, which is also the frame in which the mouse was added to the module.
 			Assert.That(call.Frame, Is.EqualTo(item.FrameCount + 1), Rig.Log.ToString());
 			Assert.That(Rig.Log.Trace(scroll.gameObject, "pointerEnter", "scroll"), Is.EqualTo(new[] { "pointerEnter@Scroll", "scroll@Scroll" }), Rig.Log.ToString());
 			Assert.That(call.ScrollDelta.y, Is.LessThan(0f), "the sign of the scroll is kept");

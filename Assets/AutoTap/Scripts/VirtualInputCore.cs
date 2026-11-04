@@ -52,6 +52,7 @@ namespace UnityAutoTap
 		readonly Dictionary<InputSystemUIInputModule, UIPointerBehavior> _modules =
 			new Dictionary<InputSystemUIInputModule, UIPointerBehavior>();
 		readonly List<InputDevice> _devices = new List<InputDevice>();
+		readonly Dictionary<Type, string> _layoutsOfTypes = new Dictionary<Type, string>();
 
 #if UNITY_EDITOR
 		readonly InputSettings _originalSettings;
@@ -335,11 +336,7 @@ namespace UnityAutoTap
 
 		public VirtualPointer GetPointer(string layout, int number)
 		{
-			if (_tornDown)
-			{
-				throw new ObjectDisposedException(nameof(VirtualInput));
-			}
-
+			ThrowIfTornDown();
 			if (string.IsNullOrEmpty(layout))
 			{
 				throw new ArgumentException("The layout is empty.", nameof(layout));
@@ -347,22 +344,138 @@ namespace UnityAutoTap
 
 			if (_virtualDevices.TryGetValue(KeyOf(layout, number), out var existing))
 			{
-				if (existing is VirtualPointer pointer)
-				{
-					return pointer;
-				}
-
-				throw new ArgumentException(
-					$"The layout '{layout}' is not a pointer. Use GetDevice for devices that are not pointers.", nameof(layout));
+				return AsPointer(existing, layout);
 			}
 
-			var device = AddDevice(layout, number);
+			return RegisterPointer(AddDevice(layout, number), layout, number);
+		}
+
+		public VirtualPointer GetPointer<TDevice>(int number) where TDevice : Pointer
+		{
+			ThrowIfTornDown();
+			if (typeof(Touchscreen).IsAssignableFrom(typeof(TDevice)))
+			{
+				throw new ArgumentException(TouchscreenMessage, "TDevice");
+			}
+
+			var layout = LayoutOf<TDevice>();
+			if (_virtualDevices.TryGetValue(KeyOf(layout, number), out var existing))
+			{
+				return AsPointer(existing, layout);
+			}
+
+			return RegisterPointer(InputSystem.AddDevice<TDevice>(DeviceName(layout, number)), layout, number);
+		}
+
+		public VirtualDevice GetDevice(string layout, int number)
+		{
+			ThrowIfTornDown();
+			if (string.IsNullOrEmpty(layout))
+			{
+				throw new ArgumentException("The layout is empty.", nameof(layout));
+			}
+
+			if (_virtualDevices.TryGetValue(KeyOf(layout, number), out var existing))
+			{
+				return AsDevice(existing, layout);
+			}
+
+			return RegisterDevice(AddDevice(layout, number), layout, number);
+		}
+
+		public VirtualDevice GetDevice<TDevice>(int number) where TDevice : InputDevice
+		{
+			ThrowIfTornDown();
+			if (typeof(Pointer).IsAssignableFrom(typeof(TDevice)))
+			{
+				throw new ArgumentException(PointerMessage(typeof(TDevice).Name), "TDevice");
+			}
+
+			var layout = LayoutOf<TDevice>();
+			if (_virtualDevices.TryGetValue(KeyOf(layout, number), out var existing))
+			{
+				return AsDevice(existing, layout);
+			}
+
+			return RegisterDevice(InputSystem.AddDevice<TDevice>(DeviceName(layout, number)), layout, number);
+		}
+
+		void ThrowIfTornDown()
+		{
+			if (_tornDown)
+			{
+				throw new ObjectDisposedException(nameof(VirtualInput));
+			}
+		}
+
+		const string TouchscreenMessage =
+			"A touchscreen is operated through its fingers (a slot of an AutoTapBase, or IVirtualInput.NewFinger), " +
+			"not as a pointer.";
+
+		static string PointerMessage(string layout)
+		{
+			return $"The layout '{layout}' is derived from Pointer. Use GetPointer for pointers, and NewFinger for a touchscreen.";
+		}
+
+		/// <summary>
+		/// The name of the layout that the Input System registered <typeparamref name="TDevice"/> under: the one that
+		/// <see cref="InputSystem.AddDevice{TDevice}"/> instantiates, which is also what a string names.
+		/// </summary>
+		string LayoutOf<TDevice>() where TDevice : InputDevice
+		{
+			if (_layoutsOfTypes.TryGetValue(typeof(TDevice), out var cached))
+			{
+				return cached;
+			}
+
+			InputControlLayout layout;
+			try
+			{
+				layout = InputSystem.LoadLayout<TDevice>();
+			}
+			catch (ArgumentException e)
+			{
+				throw new ArgumentException(
+					$"The type '{typeof(TDevice).Name}' is not registered as a layout of the Input System " +
+					"(InputSystem.RegisterLayout).",
+					"TDevice", e);
+			}
+
+			var name = layout.name.ToString();
+			_layoutsOfTypes[typeof(TDevice)] = name;
+			return name;
+		}
+
+		static VirtualPointer AsPointer(VirtualDevice existing, string layout)
+		{
+			if (existing is VirtualPointer pointer)
+			{
+				return pointer;
+			}
+
+			throw new ArgumentException(
+				$"The layout '{layout}' is not a pointer. Use GetDevice for devices that are not pointers.", nameof(layout));
+		}
+
+		static VirtualDevice AsDevice(VirtualDevice existing, string layout)
+		{
+			if (!(existing is VirtualPointer))
+			{
+				return existing;
+			}
+
+			throw new ArgumentException(
+				$"The layout '{layout}' is a pointer. Use GetPointer for pointers.", nameof(layout));
+		}
+
+		VirtualPointer RegisterPointer(InputDevice device, string layout, int number)
+		{
 			if (!(device is Pointer inputPointer) || device is Touchscreen)
 			{
 				InputSystem.RemoveDevice(device);
 				throw new ArgumentException(
 					device is Touchscreen
-						? "A touchscreen is operated through its fingers (NewFinger), not through GetPointer."
+						? TouchscreenMessage
 						: $"The layout '{layout}' is not derived from Pointer. Use GetDevice for devices that are not pointers.",
 					nameof(layout));
 			}
@@ -372,36 +485,12 @@ namespace UnityAutoTap
 			return created;
 		}
 
-		public VirtualDevice GetDevice(string layout, int number)
+		VirtualDevice RegisterDevice(InputDevice device, string layout, int number)
 		{
-			if (_tornDown)
-			{
-				throw new ObjectDisposedException(nameof(VirtualInput));
-			}
-
-			if (string.IsNullOrEmpty(layout))
-			{
-				throw new ArgumentException("The layout is empty.", nameof(layout));
-			}
-
-			if (_virtualDevices.TryGetValue(KeyOf(layout, number), out var existing))
-			{
-				if (!(existing is VirtualPointer))
-				{
-					return existing;
-				}
-
-				throw new ArgumentException(
-					$"The layout '{layout}' is a pointer. Use GetPointer for pointers.", nameof(layout));
-			}
-
-			var device = AddDevice(layout, number);
 			if (device is Pointer)
 			{
 				InputSystem.RemoveDevice(device);
-				throw new ArgumentException(
-					$"The layout '{layout}' is derived from Pointer. Use GetPointer for pointers, and NewFinger for a touchscreen.",
-					nameof(layout));
+				throw new ArgumentException(PointerMessage(layout), nameof(layout));
 			}
 
 			var created = new VirtualDevice(this, device);

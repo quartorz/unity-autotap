@@ -20,7 +20,7 @@ namespace UnityAutoTap.Tests
 		[UnityTest]
 		public IEnumerator D1_Joystick_IsOperatedByTheControlPathsOfItsLayout_AndIsCurrentAndListed()
 		{
-			// D1. Any layout that is not a pointer is a device for FireDevice. A device that is added becomes current
+			// D1. Any layout that is not a pointer is a device for Simulate<TDevice>(ControlSequence). A device that is added becomes current
 			// (InputManager.cs, 1334) and is listed by Joystick.all and by onDeviceChange. A joystick keeps the
 			// stick as two 16-bit values, so the stick is compared with a tolerance. The controls that are not marked
 			// dontReset are back to their default values when the operation is over (soft reset range,
@@ -34,7 +34,7 @@ namespace UnityAutoTap.Tests
 			OnTearDown(() => InputSystem.onDeviceChange -= OnDeviceChange);
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireDeviceSequence("Joystick",
+			yield return Step(() => item = Auto.SimulateDeviceSequence("Joystick",
 				new ControlSequence().Set("stick", new Vector2(0.5f, -0.5f)).Press("trigger").Hold(0.25f)));
 			Assert.That(item, Is.Not.Null);
 			Assert.That(item.Kind, Is.EqualTo(LogItemKind.Device));
@@ -45,7 +45,7 @@ namespace UnityAutoTap.Tests
 			Assert.That(deviceChanges.Any(c => c.Device == joystick && c.Change == InputDeviceChange.Added), Is.True,
 				"onDeviceChange tells about the device that was added");
 
-			// Fire queues both steps, as two events: the stick is written first and the trigger is pressed after it, and
+			// Simulate queues both steps, as two events: the stick is written first and the trigger is pressed after it, and
 			// the same input update processes both.
 			yield return Until(() => item.Order.HasValue, "the first change to be processed");
 			Assert.That(joystick.trigger.isPressed, Is.True, "the trigger was pressed by the input update that moved the stick");
@@ -91,8 +91,8 @@ namespace UnityAutoTap.Tests
 			LogItem attitudeItem = null;
 			yield return Step(() =>
 			{
-				accelerometerItem = Auto.FireDeviceSequence("Accelerometer", new ControlSequence().Set("acceleration", acceleration).Hold(0.25f));
-				attitudeItem = Auto.FireDeviceSequence("AttitudeSensor", new ControlSequence().Set("attitude", attitude).Hold(0.25f));
+				accelerometerItem = Auto.SimulateDeviceSequence("Accelerometer", new ControlSequence().Set("acceleration", acceleration).Hold(0.25f));
+				attitudeItem = Auto.SimulateDeviceSequence("AttitudeSensor", new ControlSequence().Set("attitude", attitude).Hold(0.25f));
 			});
 			Assert.That(accelerometerItem, Is.Not.Null);
 			Assert.That(attitudeItem, Is.Not.Null);
@@ -135,9 +135,9 @@ namespace UnityAutoTap.Tests
 			LogItem pen = null;
 			yield return Step(() =>
 			{
-				tap = Auto.FireTap(0, point, 0.25f);
-				mouse = Auto.FireMouseGesture(Gesture.PressAt(point).Hold(0.25f));
-				pen = Auto.FirePenGesture(Gesture.PressAt(point).Hold(0.25f));
+				tap = Auto.SimulateTap(0, point, 0.25f);
+				mouse = Auto.SimulateMouseGesture(Gesture.PressAt(point).Hold(0.25f));
+				pen = Auto.SimulatePenGesture(Gesture.PressAt(point).Hold(0.25f));
 			});
 			yield return Until(() => tap.Order.HasValue && mouse.Order.HasValue && pen.Order.HasValue, "all three to be processed");
 

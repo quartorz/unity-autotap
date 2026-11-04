@@ -20,7 +20,7 @@ namespace UnityAutoTap.Tests
 	/// against what was delivered.
 	/// </summary>
 	/// <remarks>
-	/// The frame arithmetic: <c>Fire</c> in frame N queues the press; the input update at the start of frame N + 1
+	/// The frame arithmetic: <c>Simulate</c> in frame N queues the press; the input update at the start of frame N + 1
 	/// processes it and the real input module delivers in that frame (InputSystemUIInputModule.cs <c>Process</c>,
 	/// 2381-2420); an operation never presses and releases in one input update, so a gesture without a wait releases
 	/// in the input update of frame N + 2.
@@ -44,15 +44,15 @@ namespace UnityAutoTap.Tests
 			yield return Step(() =>
 			{
 				fireFrame = Frame;
-				item = Auto.FireTap(0, Rig.Center(button.gameObject), 0f);
+				item = Auto.SimulateTap(0, Rig.Center(button.gameObject), 0f);
 			});
 
 			Assert.That(item, Is.Not.Null);
 			Assert.That(item.Index, Is.EqualTo(0));
-			Assert.That(Rig.Log.Count, Is.Zero, "nothing is delivered inside Fire");
+			Assert.That(Rig.Log.Count, Is.Zero, "nothing is delivered inside Simulate");
 
 			LogItem second = null;
-			yield return Step(() => second = Auto.FireTap(0, Rig.Center(button.gameObject), 0f));
+			yield return Step(() => second = Auto.SimulateTap(0, Rig.Center(button.gameObject), 0f));
 			Assert.That(second, Is.Null, "a slot that is running refuses a new operation");
 
 			yield return Until(() => item.Completed, "the tap to end");
@@ -97,8 +97,8 @@ namespace UnityAutoTap.Tests
 			LogItem outside = null;
 			yield return Step(() =>
 			{
-				onNothing = Auto.FireTap(0, Rig.EmptyPoint, 0f);
-				outside = Auto.FireTap(1, new Vector2(-5f, -5f), 0f);
+				onNothing = Auto.SimulateTap(0, Rig.EmptyPoint, 0f);
+				outside = Auto.SimulateTap(1, new Vector2(-5f, -5f), 0f);
 			});
 
 			Assert.That(outside, Is.Null, "a point outside the screen");
@@ -165,8 +165,8 @@ namespace UnityAutoTap.Tests
 			LogItem itemB = null;
 			yield return Step(() =>
 			{
-				itemA = Auto.FireTap(0, Rig.Center(a.gameObject), 0.25f);
-				itemB = Auto.FireTap(1, Rig.Center(b.gameObject), 0.55f);
+				itemA = Auto.SimulateTap(0, Rig.Center(a.gameObject), 0.25f);
+				itemB = Auto.SimulateTap(1, Rig.Center(b.gameObject), 0.55f);
 			});
 			Assert.That(itemA, Is.Not.Null);
 			Assert.That(itemB, Is.Not.Null);
@@ -209,8 +209,8 @@ namespace UnityAutoTap.Tests
 			LogItem fast = null;
 			yield return Step(() =>
 			{
-				slow = Auto.FireTap(0, Rig.Center(a.gameObject), 0.55f);
-				fast = Auto.FireTap(1, Rig.Center(b.gameObject), 0.25f);
+				slow = Auto.SimulateTap(0, Rig.Center(a.gameObject), 0.55f);
+				fast = Auto.SimulateTap(1, Rig.Center(b.gameObject), 0.25f);
 			});
 
 			yield return Until(() => slow.Completed && fast.Completed, "both taps to end");
@@ -243,7 +243,7 @@ namespace UnityAutoTap.Tests
 			StartAuto(useSession: false);
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireTap(0, Rig.Center(button.gameObject), 5f));
+			yield return Step(() => item = Auto.SimulateTap(0, Rig.Center(button.gameObject), 5f));
 			yield return Until(() => item.Order.HasValue, "the press to be processed");
 			Assert.That(Rig.Log.CountOf("pointerDown", button.gameObject), Is.EqualTo(1));
 			Assert.That(Rig.Log.CountOf("pointerUp"), Is.Zero);
@@ -276,7 +276,7 @@ namespace UnityAutoTap.Tests
 		{
 			// Stop ends what is running at once, and no processed change ended it, so CompletedOrder stays null. The
 			// releases are processed by the next input update, whose sequence lists those ends, without a number, in the
-			// order the items were fired; each end is listed once (documented on AutoTapBase.GetLatestLogs).
+			// order the operations were started; each end is listed once (documented on AutoTapBase.GetLatestLogs).
 			yield return BuildRig();
 			var a = Rig.AddButton("A", Rig.Cell(0, 1));
 			var b = Rig.AddButton("B", Rig.Cell(2, 1));
@@ -287,8 +287,8 @@ namespace UnityAutoTap.Tests
 			LogItem second = null;
 			yield return Step(() =>
 			{
-				first = Auto.FireTap(0, Rig.Center(a.gameObject), 5f);
-				second = Auto.FireTap(1, Rig.Center(b.gameObject), 5f);
+				first = Auto.SimulateTap(0, Rig.Center(a.gameObject), 5f);
+				second = Auto.SimulateTap(1, Rig.Center(b.gameObject), 5f);
 			});
 			yield return Until(() => first.Order.HasValue && second.Order.HasValue, "both presses to be processed");
 
@@ -323,7 +323,7 @@ namespace UnityAutoTap.Tests
 		[UnityTest]
 		public IEnumerator Stop_BeforeThePressWasProcessed_LeavesOrderNull_AndTheEndIsListedInTheNextInputUpdate()
 		{
-			// Fire and Stop in one frame: the press and the release that Stop queued are processed together by the next
+			// Simulate and Stop in one frame: the press and the release that Stop queued are processed together by the next
 			// input update. The operation was cut off by then, so the processed press is not attributed to it and Order
 			// stays null; its end is listed without a number in that update's sequence.
 			yield return BuildRig();
@@ -332,7 +332,7 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireTap(0, Rig.Center(button.gameObject), 5f));
+			yield return Step(() => item = Auto.SimulateTap(0, Rig.Center(button.gameObject), 5f));
 			Assert.That(item, Is.Not.Null);
 			Auto.Stop();
 
@@ -362,7 +362,7 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireTap(0, Rig.Center(button.gameObject), 0f));
+			yield return Step(() => item = Auto.SimulateTap(0, Rig.Center(button.gameObject), 0f));
 			yield return Until(() => item.Completed, "the tap to end");
 
 			var down = Rig.Log.First("pointerDown");
@@ -390,7 +390,7 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireTap(0, Rig.Center(button.gameObject), 0f));
+			yield return Step(() => item = Auto.SimulateTap(0, Rig.Center(button.gameObject), 0f));
 			yield return Until(() => item.Completed, "the tap to end");
 
 			var initialize = Rig.Log.First("initializePotentialDrag");
@@ -414,7 +414,7 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireTap(0, Rig.Center(child), 0f));
+			yield return Step(() => item = Auto.SimulateTap(0, Rig.Center(child), 0f));
 			yield return Until(() => item.Completed, "the tap to end");
 
 			Assert.That(item.Target, Is.SameAs(parent.gameObject));
@@ -437,7 +437,7 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireFinger(0, Gesture.PressAt(Rig.Center(a.gameObject)).MoveTo(Rig.Center(b.gameObject), 0.3f)));
+			yield return Step(() => item = Auto.SimulateGesture(0, Gesture.PressAt(Rig.Center(a.gameObject)).MoveTo(Rig.Center(b.gameObject), 0.3f)));
 			yield return Until(() => item.Completed, "the gesture to end");
 			yield return Steps(2);
 
@@ -466,7 +466,7 @@ namespace UnityAutoTap.Tests
 			CollectLogs = true;
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireFinger(0,
+			yield return Step(() => item = Auto.SimulateGesture(0,
 				Gesture.PressAt(Rig.Center(source)).MoveTo(Rig.Center(zone), 0.4f)));
 			yield return Until(() => item.Completed, "the drag to end");
 			yield return Steps(2);
@@ -524,7 +524,7 @@ namespace UnityAutoTap.Tests
 			Auto.Refuse = hit => hit.gameObject == blocker;
 
 			LogItem refused = null;
-			yield return Step(() => refused = Auto.FireTap(0, Rig.Center(blocker), 0f));
+			yield return Step(() => refused = Auto.SimulateTap(0, Rig.Center(blocker), 0f));
 			Assert.That(refused, Is.Null);
 			Assert.That(Auto.AskedCount, Is.EqualTo(1));
 			Assert.That(Auto.LastTopmost.gameObject, Is.SameAs(blocker));
@@ -538,7 +538,7 @@ namespace UnityAutoTap.Tests
 			// A press that is not refused goes on as usual.
 			Auto.Refuse = null;
 			LogItem accepted = null;
-			yield return Step(() => accepted = Auto.FireTap(0, Rig.Center(blocker), 0f));
+			yield return Step(() => accepted = Auto.SimulateTap(0, Rig.Center(blocker), 0f));
 			Assert.That(accepted, Is.Not.Null);
 			yield return Until(() => accepted.Completed, "the tap to end");
 			Assert.That(Rig.Log.First("pointerDown").Target, Is.SameAs(blocker));
@@ -558,7 +558,7 @@ namespace UnityAutoTap.Tests
 			Auto.Refuse = hit => hit.gameObject == b;
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireMouseGesture(Gesture
+			yield return Step(() => item = Auto.SimulateMouseGesture(Gesture
 				.PressAt(Rig.Center(a))
 				.MoveTo(Rig.Center(b), 0.2f)
 				.Press("rightButton")
@@ -588,8 +588,8 @@ namespace UnityAutoTap.Tests
 			LogItem key = null;
 			yield return Step(() =>
 			{
-				tap = Auto.FireTap(2, Rig.Center(button.gameObject), 0f);
-				key = Auto.FireKeyPress(UnityEngine.InputSystem.Key.Space);
+				tap = Auto.SimulateTap(2, Rig.Center(button.gameObject), 0f);
+				key = Auto.SimulateKeyPress(UnityEngine.InputSystem.Key.Space);
 			});
 
 			Assert.That(tap, Is.TypeOf<TestLogItem>());

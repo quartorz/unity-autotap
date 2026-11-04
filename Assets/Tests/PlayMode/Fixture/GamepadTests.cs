@@ -65,7 +65,7 @@ namespace UnityAutoTap.Tests
 
 			// Stick down: A is selected, so A gets a move to Down and the selection goes to B (explicit navigation).
 			LogItem stick = null;
-			yield return Step(() => stick = Auto.FireGamepadSequence(new ControlSequence().Set("leftStick", Vector2.down).Hold(0.25f)));
+			yield return Step(() => stick = Auto.SimulateGamepadSequence(new ControlSequence().Set("leftStick", Vector2.down).Hold(0.25f)));
 			Assert.That(stick, Is.Not.Null);
 			yield return Until(() => stick.Completed, "the stick to be released");
 			var moves = Rig.Log.Of("move").ToList();
@@ -78,7 +78,7 @@ namespace UnityAutoTap.Tests
 
 			// D-pad right: B gets the move, the selection goes to C.
 			LogItem dpad = null;
-			yield return Step(() => dpad = Auto.FireGamepadSequence(new ControlSequence().Press(GamepadButton.DpadRight).Hold(0.15f)));
+			yield return Step(() => dpad = Auto.SimulateGamepadSequence(new ControlSequence().Press(GamepadButton.DpadRight).Hold(0.15f)));
 			yield return Until(() => dpad.Completed, "the d-pad to be released");
 			var rightMove = Rig.Log.Of("move").Last();
 			Assert.That(rightMove.Target, Is.SameAs(b.gameObject));
@@ -88,7 +88,7 @@ namespace UnityAutoTap.Tests
 
 			// South submits, East cancels; both once, in the frame they were processed, and to the selected object.
 			LogItem submit = null;
-			yield return Step(() => submit = Auto.FireGamepadSequence(new ControlSequence().Press(GamepadButton.South).Hold(0.25f)));
+			yield return Step(() => submit = Auto.SimulateGamepadSequence(new ControlSequence().Press(GamepadButton.South).Hold(0.25f)));
 			yield return Until(() => submit.Completed, "South to be released");
 			Assert.That(Rig.Log.CountOf("submit"), Is.EqualTo(1), "a held button does not repeat submit");
 			Assert.That(Rig.Log.First("submit").Target, Is.SameAs(c.gameObject));
@@ -96,7 +96,7 @@ namespace UnityAutoTap.Tests
 
 			Assert.That(cancelPerformed, Is.Zero);
 			LogItem cancel = null;
-			yield return Step(() => cancel = Auto.FireGamepadSequence(new ControlSequence().Press(GamepadButton.East).Hold(0.25f)));
+			yield return Step(() => cancel = Auto.SimulateGamepadSequence(new ControlSequence().Press(GamepadButton.East).Hold(0.25f)));
 			yield return Until(() => cancel.Completed, "East to be released");
 			Assert.That(Rig.Log.CountOf("cancel"), Is.EqualTo(1), "a held button does not repeat cancel");
 			Assert.That(Rig.Log.First("cancel").Target, Is.SameAs(c.gameObject));
@@ -108,10 +108,10 @@ namespace UnityAutoTap.Tests
 			yield return Steps(1);
 			var before = Rig.Log.Count;
 			LogItem silentStick = null;
-			yield return Step(() => silentStick = Auto.FireGamepadSequence(new ControlSequence().Set("leftStick", Vector2.up).Hold(0.25f)));
+			yield return Step(() => silentStick = Auto.SimulateGamepadSequence(new ControlSequence().Set("leftStick", Vector2.up).Hold(0.25f)));
 			yield return Until(() => silentStick.Completed, "the stick to be released");
 			LogItem silentSubmit = null;
-			yield return Step(() => silentSubmit = Auto.FireGamepadSequence(new ControlSequence().Press(GamepadButton.South).Hold(0.25f)));
+			yield return Step(() => silentSubmit = Auto.SimulateGamepadSequence(new ControlSequence().Press(GamepadButton.South).Hold(0.25f)));
 			yield return Until(() => silentSubmit.Completed, "South to be released");
 			Assert.That(Rig.Log.Count, Is.EqualTo(before), "no move, submit or cancel without a selection");
 			Assert.That(Rig.EventSystem.currentSelectedGameObject, Is.Null);
@@ -139,7 +139,7 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem stick = null;
-			yield return Step(() => stick = Auto.FireGamepadSequence(new ControlSequence().Set("leftStick", Vector2.down).Hold(2.5f)));
+			yield return Step(() => stick = Auto.SimulateGamepadSequence(new ControlSequence().Set("leftStick", Vector2.down).Hold(2.5f)));
 			yield return Until(() => stick.Completed, "the stick to be released", 90);
 
 			var moves = Rig.Log.Of("move").ToList();
@@ -184,7 +184,7 @@ namespace UnityAutoTap.Tests
 
 			StartAuto();
 			LogItem pad = null;
-			yield return Step(() => pad = Auto.FireGamepadSequence(new ControlSequence().Press(GamepadButton.South).Hold(0.15f)));
+			yield return Step(() => pad = Auto.SimulateGamepadSequence(new ControlSequence().Press(GamepadButton.South).Hold(0.15f)));
 			Assert.That(player.currentControlScheme, Is.EqualTo("KeyboardMouse"), "nothing was processed yet");
 			yield return Until(() => pad.Completed, "South to be released");
 			yield return Steps(2);

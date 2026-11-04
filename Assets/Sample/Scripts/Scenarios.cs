@@ -329,8 +329,11 @@ namespace Sample
 				}
 				else
 				{
-					Fire(index, GetScreenPoint(_mainCanvas.worldCamera, _scrollRect, 0.5f, 0.4f),
-						GetScreenPoint(_mainCanvas.worldCamera, _scrollRect, 0.5f, 0.6f), 0.5f);
+					Simulate(
+						index,
+						Gesture
+							.PressAt(GetScreenPoint(_mainCanvas.worldCamera, _scrollRect, 0.5f, 0.4f))
+							.MoveTo(GetScreenPoint(_mainCanvas.worldCamera, _scrollRect, 0.5f, 0.6f), 0.5f));
 					_timer = 0.7f;
 				}
 			}

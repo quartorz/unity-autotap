@@ -68,9 +68,9 @@ namespace UnityAutoTap.Tests
 			StartAuto();
 
 			LogItem escape = null;
-			yield return Step(() => escape = Auto.FireKeyPress(Key.Escape, 0.35f));
+			yield return Step(() => escape = Auto.SimulateKeyPress(Key.Escape, 0.35f));
 			Assert.That(escape, Is.Not.Null);
-			Assert.That(performed, Is.Empty, "nothing is processed inside Fire");
+			Assert.That(performed, Is.Empty, "nothing is processed inside Simulate");
 			Assert.That(Rig.Log.CountOf("cancel"), Is.Zero);
 
 			yield return Until(() => escape.Order.HasValue, "the key press to be processed");
@@ -87,8 +87,8 @@ namespace UnityAutoTap.Tests
 		[UnityTest]
 		public IEnumerator K1_EscapeTwiceInARow_CancelsTwice()
 		{
-			// Two presses of Escape, with a Fire attempt in every frame. The device runs one operation at a time, so
-			// the attempt of the frame after the first Fire returns null (the release is not processed yet); the next
+			// Two presses of Escape, with a Simulate attempt in every frame. The device runs one operation at a time, so
+			// the attempt of the frame after the first Simulate returns null (the release is not processed yet); the next
 			// one is accepted, which is the second frame after the first press. Both presses cancel.
 			yield return RigWithASelection(out var target);
 			var performed = new List<int>();
@@ -101,7 +101,7 @@ namespace UnityAutoTap.Tests
 			{
 				yield return Step(() =>
 				{
-					var item = Auto.FireKeyPress(Key.Escape);
+					var item = Auto.SimulateKeyPress(Key.Escape);
 					if (item != null)
 					{
 						items.Add(item);
@@ -118,7 +118,7 @@ namespace UnityAutoTap.Tests
 			yield return Steps(1);
 
 			var gap = items[1].StartedFrameCount - items[0].StartedFrameCount;
-			TestContext.WriteLine($"Frames between the two presses: {gap}; Fire was refused {refused} time(s) in between.");
+			TestContext.WriteLine($"Frames between the two presses: {gap}; Simulate was refused {refused} time(s) in between.");
 			Assert.That(refused, Is.GreaterThanOrEqualTo(1), "the device was busy until the release of the first press was processed");
 			Assert.That(gap, Is.GreaterThanOrEqualTo(2), "a press and its release are in two input updates");
 			Assert.That(performed, Has.Count.EqualTo(2), "*/{Cancel} was performed twice");
@@ -306,7 +306,7 @@ namespace UnityAutoTap.Tests
 			yield return Steps(2);
 
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireKeyPress(Key.R, 0.25f, Key.LeftCtrl));
+			yield return Step(() => item = Auto.SimulateKeyPress(Key.R, 0.25f, Key.LeftCtrl));
 			Assert.That(item, Is.Not.Null);
 			yield return Until(() => item.Completed, "the shortcut to end");
 			yield return Steps(1);
@@ -353,7 +353,7 @@ namespace UnityAutoTap.Tests
 			yield return Steps(1);
 
 			LogItem plainKey = null;
-			yield return Step(() => plainKey = Auto.FireKeyPress(Key.B));
+			yield return Step(() => plainKey = Auto.SimulateKeyPress(Key.B));
 			yield return Until(() => plainKey.Completed, "the key to end");
 			Assert.That(typed, Is.Empty, "a key press does not enter a character");
 			changes.Items.Clear();
@@ -363,7 +363,7 @@ namespace UnityAutoTap.Tests
 				.Composition("か").Composition("かん").Composition("")
 				.Text("漢");
 			LogItem item = null;
-			yield return Step(() => item = Auto.FireDeviceSequence("Keyboard", sequence));
+			yield return Step(() => item = Auto.SimulateDeviceSequence("Keyboard", sequence));
 			yield return Until(() => item.Completed, "the sequence to end");
 			yield return Steps(1);
 

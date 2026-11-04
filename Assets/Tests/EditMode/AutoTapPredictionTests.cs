@@ -4,6 +4,7 @@ using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.UI;
 
 namespace UnityAutoTap.Tests
@@ -56,7 +57,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void TheTargetIsThePointerDownReceiverAtTheTimeOfFire()
+		public void TheTargetIsThePointerDownReceiverAtTheTimeOfSimulate()
 		{
 			var button = _scene.Add<ClickHandler>("Button", 0.1f, 0.1f, 0.3f, 0.3f);
 
@@ -351,6 +352,39 @@ namespace UnityAutoTap.Tests
 			scenario.Dispose();
 		}
 
+		[Test]
+		public void AScenarioStartsWhatItSimulatesOnTheDevicesOfItsOwner()
+		{
+			var scenario = new TrySenario(_autoTap);
+			var p = TestScene.At(0.5f, 0.5f);
+
+			var items = scenario.SimulateOnEveryDevice(p);
+
+			Assert.That(items, Has.All.Not.Null);
+			Assert.That(items.Select(i => i.Kind), Is.EqualTo(new[]
+			{
+				AutoTapBase.LogItemKind.Finger,
+				AutoTapBase.LogItemKind.Pointer,
+				AutoTapBase.LogItemKind.Pointer,
+				AutoTapBase.LogItemKind.Device,
+				AutoTapBase.LogItemKind.Device,
+			}));
+			Assert.That(items.Select(i => i.Device.name), Is.EqualTo(new[]
+			{
+				"AutoTap-Touchscreen-0", "AutoTap-Mouse-0", "AutoTap-Pen-0", "AutoTap-Gamepad-0", "AutoTap-Keyboard-0",
+			}));
+			foreach (var item in items)
+			{
+				RunUntilCompleted(item);
+			}
+
+			var key = scenario.SimulateKey();
+			Assert.That(key, Is.Not.Null);
+			Assert.That(key.Device, Is.SameAs(items[4].Device), "the key is a key of the keyboard of the type and of the layout");
+			RunUntilCompleted(key);
+			scenario.Dispose();
+		}
+
 		sealed class TrySenario : Scenario
 		{
 			public TrySenario(AutoTapBase owner) : base(owner)
@@ -368,6 +402,23 @@ namespace UnityAutoTap.Tests
 			public bool Try(int index, Canvas canvas, RectTransform target, float duration)
 			{
 				return TryTap(index, canvas, target, duration);
+			}
+
+			public AutoTapBase.LogItem[] SimulateOnEveryDevice(Vector2 position)
+			{
+				return new[]
+				{
+					Simulate(0, Gesture.PressAt(position).Hold(0.1f)),
+					Simulate<Mouse>(Gesture.HoverAt(position)),
+					Simulate("Pen", Gesture.HoverAt(position)),
+					Simulate<Gamepad>(new ControlSequence().Press(GamepadButton.South)),
+					Simulate("Keyboard", new ControlSequence().Press(Key.A)),
+				};
+			}
+
+			public AutoTapBase.LogItem SimulateKey()
+			{
+				return Simulate(Key.B, 0.1f);
 			}
 		}
 	}

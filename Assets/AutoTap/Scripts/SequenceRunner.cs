@@ -50,8 +50,8 @@ namespace UnityAutoTap
 	/// not use is passed on, and a release that follows a press of the same call waits for the next call.
 	/// </para>
 	/// <para>
-	/// <c>Fire</c> calls <see cref="Advance"/> with no time, so that the steps at the start of the sequence that take
-	/// no time are queued in the frame of <c>Fire</c>.
+	/// <c>Simulate</c> calls <see cref="Advance"/> with no time, so that the steps at the start of the sequence that
+	/// take no time are queued in the frame of <c>Simulate</c>.
 	/// </para>
 	/// </remarks>
 	internal sealed class SequenceRunner

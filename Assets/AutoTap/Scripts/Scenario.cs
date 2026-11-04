@@ -57,64 +57,40 @@ namespace UnityAutoTap
 		{
 		}
 
-		/// <inheritdoc cref="AutoTapBase.Fire(int, Vector2, Vector2, float)"/>
-		protected AutoTapBase.LogItem Fire(int index, Vector2 from, Vector2 to, float duration)
+		/// <inheritdoc cref="AutoTapBase.Simulate(int, Gesture)"/>
+		protected AutoTapBase.LogItem Simulate(int slot, Gesture gesture)
 		{
-			return Owner.Fire(index, from, to, duration);
+			return Owner.Simulate(slot, gesture);
 		}
 
-		/// <inheritdoc cref="AutoTapBase.Fire(int, Vector2, float)"/>
-		protected AutoTapBase.LogItem Fire(int index, Vector2 position, float duration)
+		/// <inheritdoc cref="AutoTapBase.Simulate{TDevice}(Gesture, int)"/>
+		protected AutoTapBase.LogItem Simulate<TDevice>(Gesture gesture, int number = 0) where TDevice : Pointer
 		{
-			return Owner.Fire(index, position, duration);
+			return Owner.Simulate<TDevice>(gesture, number);
 		}
 
-		/// <inheritdoc cref="AutoTapBase.Fire(int, Gesture)"/>
-		protected AutoTapBase.LogItem Fire(int index, Gesture gesture)
+		/// <inheritdoc cref="AutoTapBase.Simulate{TDevice}(ControlSequence, int)"/>
+		protected AutoTapBase.LogItem Simulate<TDevice>(ControlSequence sequence, int number = 0) where TDevice : InputDevice
 		{
-			return Owner.Fire(index, gesture);
+			return Owner.Simulate<TDevice>(sequence, number);
 		}
 
-		/// <inheritdoc cref="AutoTapBase.FirePointer"/>
-		protected AutoTapBase.LogItem FirePointer(string layout, Gesture gesture, int number = 0)
+		/// <inheritdoc cref="AutoTapBase.Simulate(string, Gesture, int)"/>
+		protected AutoTapBase.LogItem Simulate(string layout, Gesture gesture, int number = 0)
 		{
-			return Owner.FirePointer(layout, gesture, number);
+			return Owner.Simulate(layout, gesture, number);
 		}
 
-		/// <inheritdoc cref="AutoTapBase.FireDevice"/>
-		protected AutoTapBase.LogItem FireDevice(string layout, ControlSequence sequence, int number = 0)
+		/// <inheritdoc cref="AutoTapBase.Simulate(string, ControlSequence, int)"/>
+		protected AutoTapBase.LogItem Simulate(string layout, ControlSequence sequence, int number = 0)
 		{
-			return Owner.FireDevice(layout, sequence, number);
+			return Owner.Simulate(layout, sequence, number);
 		}
 
-		/// <inheritdoc cref="AutoTapBase.FireMouse"/>
-		protected AutoTapBase.LogItem FireMouse(Gesture gesture, int number = 0)
+		/// <inheritdoc cref="AutoTapBase.Simulate(Key, float, Key[])"/>
+		protected AutoTapBase.LogItem Simulate(Key key, float duration = 0f, params Key[] modifiers)
 		{
-			return Owner.FireMouse(gesture, number);
-		}
-
-		/// <inheritdoc cref="AutoTapBase.FirePen"/>
-		protected AutoTapBase.LogItem FirePen(Gesture gesture, int number = 0)
-		{
-			return Owner.FirePen(gesture, number);
-		}
-
-		/// <inheritdoc cref="AutoTapBase.FireScroll"/>
-		protected AutoTapBase.LogItem FireScroll(Vector2 screenPosition, Vector2 delta)
-		{
-			return Owner.FireScroll(screenPosition, delta);
-		}
-
-		/// <inheritdoc cref="AutoTapBase.FireGamepad"/>
-		protected AutoTapBase.LogItem FireGamepad(ControlSequence sequence, int number = 0)
-		{
-			return Owner.FireGamepad(sequence, number);
-		}
-
-		/// <inheritdoc cref="AutoTapBase.FireKey"/>
-		protected AutoTapBase.LogItem FireKey(Key key, float duration = 0f, params Key[] modifiers)
-		{
-			return Owner.FireKey(key, duration, modifiers);
+			return Owner.Simulate(key, duration, modifiers);
 		}
 
 		/// <summary>
@@ -150,8 +126,17 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// Tap if <paramref name="target"/> is not destroyed.
+		/// Taps the center of <paramref name="target"/> with the finger of slot <paramref name="index"/> if it is not
+		/// destroyed: <c>Simulate(index, Gesture.PressAt(point).Hold(duration))</c>, where <c>point</c> is the screen
+		/// point of the center of <paramref name="target"/>, and a check that the tap reaches it.
 		/// </summary>
+		/// <param name="index">The slot.</param>
+		/// <param name="canvas">
+		/// The canvas that <paramref name="target"/> is under; its <see cref="Canvas.worldCamera"/>, if any, converts the
+		/// position to the screen. <c>null</c> for a canvas that has no camera.
+		/// </param>
+		/// <param name="target">The object to tap.</param>
+		/// <param name="duration">The time to hold the finger down, in seconds.</param>
 		/// <returns>
 		/// <c>true</c> if the tap was started and the press is predicted to be delivered to
 		/// <paramref name="target"/>, that is, <see cref="AutoTapBase.LogItem.Target"/> at the time of the call is
@@ -165,8 +150,8 @@ namespace UnityAutoTap
 				var p = canvas != null && canvas.worldCamera != null
 					? GetScreenPoint(canvas.worldCamera, target)
 					: GetScreenPoint(target);
-				var fired = Fire(index, p, duration);
-				return fired != null && fired.Target == target.gameObject;
+				var started = Simulate(index, Gesture.PressAt(p).Hold(Mathf.Max(0f, duration)));
+				return started != null && started.Target == target.gameObject;
 			}
 
 			return false;

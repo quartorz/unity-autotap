@@ -113,6 +113,32 @@ namespace UnityAutoTap
 		VirtualPointer GetPointer(string layout, int number = 0);
 
 		/// <summary>
+		/// Gives a virtual pointer device other than a touchscreen, by its type.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// The device is added with <see cref="InputSystem.AddDevice{TDevice}"/>, so the layout is the one that the Input
+		/// System registered <typeparamref name="TDevice"/> under. It is the same device as the one that
+		/// <see cref="GetPointer(string, int)"/> gives for the name of that layout and the same <paramref name="number"/>:
+		/// <c>GetPointer&lt;Mouse&gt;()</c> and <c>GetPointer("Mouse")</c> are one <see cref="VirtualPointer"/>.
+		/// </para>
+		/// <para>
+		/// <see cref="Touchscreen"/> is derived from <see cref="Pointer"/>, so the type constraint cannot refuse it; it
+		/// is refused when this method is called.
+		/// </para>
+		/// </remarks>
+		/// <typeparam name="TDevice">
+		/// The type of the device, for example <see cref="Mouse"/> or <see cref="Pen"/>. It has to be registered as a layout
+		/// of the Input System.
+		/// </typeparam>
+		/// <param name="number">Tells apart several devices of the same layout.</param>
+		/// <returns>The same instance for the same (layout, number) pair.</returns>
+		/// <exception cref="ArgumentException">
+		/// <typeparamref name="TDevice"/> is a <see cref="Touchscreen"/> or is not registered as a layout.
+		/// </exception>
+		VirtualPointer GetPointer<TDevice>(int number = 0) where TDevice : Pointer;
+
+		/// <summary>
 		/// Gives a virtual device that is not a pointer.
 		/// </summary>
 		/// <param name="layout">The layout of the device, for example <c>Keyboard</c> or <c>Gamepad</c>.</param>
@@ -120,6 +146,27 @@ namespace UnityAutoTap
 		/// <returns>The same instance for the same (layout, number) pair.</returns>
 		/// <exception cref="ArgumentException">There is no such layout, or it is derived from <see cref="Pointer"/>.</exception>
 		VirtualDevice GetDevice(string layout, int number = 0);
+
+		/// <summary>
+		/// Gives a virtual device that is not a pointer, by its type.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// The device is the same one that <see cref="GetDevice(string, int)"/> gives for the name of the layout of
+		/// <typeparamref name="TDevice"/> and the same <paramref name="number"/>: <c>GetDevice&lt;Keyboard&gt;()</c> and
+		/// <c>GetDevice("Keyboard")</c> are one <see cref="VirtualDevice"/>.
+		/// </para>
+		/// </remarks>
+		/// <typeparam name="TDevice">
+		/// The type of the device, for example <see cref="Keyboard"/> or <see cref="Gamepad"/>. It has to be registered as
+		/// a layout of the Input System.
+		/// </typeparam>
+		/// <param name="number">Tells apart several devices of the same layout.</param>
+		/// <returns>The same instance for the same (layout, number) pair.</returns>
+		/// <exception cref="ArgumentException">
+		/// <typeparamref name="TDevice"/> is derived from <see cref="Pointer"/> or is not registered as a layout.
+		/// </exception>
+		VirtualDevice GetDevice<TDevice>(int number = 0) where TDevice : InputDevice;
 
 		/// <summary>
 		/// Reports the changes of the virtual devices only, in processing order. Always the same instance.
@@ -161,10 +208,24 @@ namespace UnityAutoTap
 		}
 
 		/// <inheritdoc/>
+		public VirtualPointer GetPointer<TDevice>(int number = 0) where TDevice : Pointer
+		{
+			ThrowIfDisposed();
+			return _core.GetPointer<TDevice>(number);
+		}
+
+		/// <inheritdoc/>
 		public VirtualDevice GetDevice(string layout, int number = 0)
 		{
 			ThrowIfDisposed();
 			return _core.GetDevice(layout, number);
+		}
+
+		/// <inheritdoc/>
+		public VirtualDevice GetDevice<TDevice>(int number = 0) where TDevice : InputDevice
+		{
+			ThrowIfDisposed();
+			return _core.GetDevice<TDevice>(number);
 		}
 
 		/// <inheritdoc/>

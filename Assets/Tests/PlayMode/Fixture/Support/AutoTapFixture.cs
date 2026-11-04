@@ -193,7 +193,7 @@ namespace UnityAutoTap.Tests
 		/// running.
 		/// </summary>
 		/// <param name="inUpdate">
-		/// Code to run inside that <c>Update</c>, before the slots are visited, which is where a scenario fires. It runs
+		/// Code to run inside that <c>Update</c>, before the slots are visited, which is where a scenario starts operations. It runs
 		/// even if <see cref="Auto"/> is not running.
 		/// </param>
 		protected IEnumerator Step(Action inUpdate = null)

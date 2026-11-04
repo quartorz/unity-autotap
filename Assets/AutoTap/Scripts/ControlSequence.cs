@@ -8,7 +8,8 @@ namespace UnityAutoTap
 {
 	/// <summary>
 	/// The plan of one device that has no position: a <see cref="Keyboard"/>, a <see cref="Gamepad"/>, a joystick, a
-	/// sensor or any custom layout. Passed to <see cref="AutoTapBase.FireDevice"/>.
+	/// sensor or any custom layout. Passed to <see cref="AutoTapBase.Simulate{TDevice}(ControlSequence, int)"/> or
+	/// <see cref="AutoTapBase.Simulate(string, ControlSequence, int)"/>.
 	/// </summary>
 	/// <remarks>
 	/// <para>
@@ -19,19 +20,19 @@ namespace UnityAutoTap
 	/// </para>
 	/// <para>
 	/// Controls are named by their path relative to the device (for example <c>leftStick</c>, <c>buttonSouth</c> or
-	/// <c>space</c>). A path that names no control of the device makes <c>FireDevice</c> throw
-	/// <see cref="ArgumentException"/>, and so does a layout derived from <see cref="Pointer"/>, which is fired with
-	/// <see cref="AutoTapBase.FirePointer"/>.
+	/// <c>space</c>). A path that names no control of the device makes <c>Simulate</c> throw
+	/// <see cref="ArgumentException"/>, and so does a type or a layout derived from <see cref="Pointer"/>, which is
+	/// operated with a <see cref="Gesture"/>.
 	/// </para>
 	/// <para>
 	/// Every step that writes is an event of its own, even when several steps fall into one frame, so the order of the
 	/// steps is the order in which the Input System processes them (which a shortcut such as Ctrl+R depends on). The
-	/// steps at the start that take no time fall into the frame of <c>Fire</c>, which queues them. A control is never
+	/// steps at the start that take no time fall into the frame of <c>Simulate</c>, which queues them. A control is never
 	/// pressed and released by the same input update: a release that follows a press with no time in between is made
 	/// in the next frame.
 	/// </para>
 	/// <para>
-	/// A sequence must not be modified after it was passed to a <c>Fire</c> method.
+	/// A sequence must not be modified after it was passed to a <c>Simulate</c> method.
 	/// </para>
 	/// </remarks>
 	public sealed class ControlSequence

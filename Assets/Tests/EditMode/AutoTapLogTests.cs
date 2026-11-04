@@ -228,7 +228,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void StopOrdersTheEndsByHowTheItemsWereFired()
+		public void StopOrdersTheEndsByTheOrderTheOperationsWereStarted()
 		{
 			var first = _autoTap.Tap(2, TestScene.At(0.2f, 0.2f), 1f);
 			var second = _autoTap.Tap(0, TestScene.At(0.4f, 0.2f), 1f);
@@ -317,7 +317,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void DroppedItemsComeAfterTheOnesThatHaveAnOrderInTheOrderTheyWereFired()
+		public void DroppedItemsComeAfterTheOnesThatHaveAnOrderInTheOrderTheyWereStarted()
 		{
 			var running = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
 			Frame();
@@ -379,7 +379,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void AFireFromOnTapCompletedIsAccepted()
+		public void ASimulateFromOnTapCompletedIsAccepted()
 		{
 			AutoTapBase.LogItem second = null;
 			_autoTap.OnCompletedHook = (index, item) =>

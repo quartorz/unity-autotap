@@ -88,7 +88,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void AFiredHoverMovesTheMouseAndPressesNothing()
+		public void ASimulatedHoverMovesTheMouseAndPressesNothing()
 		{
 			var p = TestScene.At(0.5f, 0.5f);
 
@@ -343,12 +343,12 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void FireQueuesEveryStepAtTheStartThatTakesNoTimeAndKeepsAReleaseForTheNextInputUpdate()
+		public void SimulateQueuesEveryStepAtTheStartThatTakesNoTimeAndKeepsAReleaseForTheNextInputUpdate()
 		{
 			var p = TestScene.At(0.5f, 0.5f);
 
 			var item = _autoTap.Mouse(Gesture.HoverAt(p).Press("rightButton").Release("rightButton").Press().Release());
-			Assert.That(_changes, Is.Empty, "Fire processes nothing");
+			Assert.That(_changes, Is.Empty, "Simulate processes nothing");
 			RunUntilCompleted(item);
 
 			var buttons = _changes.OfType<ControlChange>().Where(c => c is ButtonDown || c is ButtonUp).ToList();
@@ -557,6 +557,43 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
+		public void ATypeAndTheNameOfItsLayoutOperateTheSameMouse()
+		{
+			var p = TestScene.At(0.2f, 0.2f);
+			var q = TestScene.At(0.6f, 0.4f);
+
+			var byType = _autoTap.Pointer<Mouse>(Gesture.HoverAt(p).Hold(0.2f));
+
+			Assert.That(_autoTap.Pointer("Mouse", Gesture.HoverAt(q)), Is.Null, "the mouse is taken by the operation of the type");
+			Assert.That(_autoTap.Pointer("mouse", Gesture.HoverAt(q)), Is.Null, "layout names do not depend on the case");
+			Assert.That(_autoTap.Pointer<Mouse>(Gesture.HoverAt(q), 1), Is.Not.Null, "another number is another mouse");
+
+			RunUntilCompleted(byType);
+			var byName = _autoTap.Pointer("Mouse", Gesture.HoverAt(q));
+			Assert.That(byName, Is.Not.Null);
+			RunUntilCompleted(byName);
+			var byTypeAgain = _autoTap.Mouse(Gesture.HoverAt(p));
+
+			Assert.That(byName.Device, Is.SameAs(byType.Device));
+			Assert.That(byTypeAgain.Device, Is.SameAs(byType.Device));
+			Assert.That(InputSystem.devices.Where(VirtualInput.IsVirtual).OfType<Mouse>().Select(m => m.name),
+				Is.EquivalentTo(new[] { "AutoTap-Mouse-0", "AutoTap-Mouse-1" }));
+		}
+
+		[Test]
+		public void ATouchscreenIsOperatedOnlyThroughItsFingersAndNothingIsLeftBehind()
+		{
+			var p = TestScene.At(0.5f, 0.5f);
+
+			Assert.Throws<ArgumentException>(() => _autoTap.Pointer<Touchscreen>(Gesture.PressAt(p)));
+			Assert.Throws<ArgumentException>(() => _autoTap.Pointer("Touchscreen", Gesture.PressAt(p)));
+			Assert.Throws<ArgumentException>(() => _autoTap.Pointer("touchscreen", Gesture.PressAt(p)));
+
+			Assert.That(InputSystem.devices.Where(VirtualInput.IsVirtual), Is.Empty);
+			Assert.That(_autoTap.Tap(0, p, 0f), Is.Not.Null, "a finger is the way to operate it");
+		}
+
+		[Test]
 		public void AGestureThatDoesNotFitAPointerThrows()
 		{
 			var p = TestScene.At(0.5f, 0.5f);
@@ -574,7 +611,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void FirePointerOutsideTheScreenReturnsNull()
+		public void SimulatePointerOutsideTheScreenReturnsNull()
 		{
 			Assert.That(_autoTap.Mouse(Gesture.HoverAt(new Vector2(-1, 10))), Is.Null);
 			Assert.That(_autoTap.Mouse(Gesture.HoverAt(new Vector2(10, 10)).MoveTo(new Vector2(Screen.width + 1, 10), 0.1f)), Is.Null);
@@ -697,7 +734,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void FireOfAShortcutOnADisabledAutoTapReturnsNull()
+		public void SimulateOnADisabledAutoTapReturnsNullForAMouseAndAScroll()
 		{
 			_autoTap.Stop();
 

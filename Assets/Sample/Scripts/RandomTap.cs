@@ -15,16 +15,21 @@ namespace Sample
 			var height = Screen.height;
 			if (Random.Range(0, 100) < 50)
 			{
-				Fire(index, new Vector2(width * Random.Range(0f, 1f), height * Random.Range(0f, 1f)),
-					Random.Range(0.1f, 1f));
+				Simulate(
+					index,
+					Gesture
+						.PressAt(new Vector2(width * Random.Range(0f, 1f), height * Random.Range(0f, 1f)))
+						.Hold(Random.Range(0.1f, 1f)));
 			}
 			else
 			{
-				Fire(
+				Simulate(
 					index,
-					new Vector2(width * Random.Range(0f, 1f), height * Random.Range(0f, 1f)),
-					new Vector2(width * Random.Range(0f, 1f), height * Random.Range(0f, 1f)),
-					Random.Range(0.1f, 1f));
+					Gesture
+						.PressAt(new Vector2(width * Random.Range(0f, 1f), height * Random.Range(0f, 1f)))
+						.MoveTo(
+							new Vector2(width * Random.Range(0f, 1f), height * Random.Range(0f, 1f)),
+							Random.Range(0.1f, 1f)));
 			}
 		}
 	}

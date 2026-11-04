@@ -13,19 +13,22 @@ namespace UnityAutoTap
 		public enum LogItemKind
 		{
 			/// <summary>
-			/// A finger that follows a <see cref="UnityAutoTap.Gesture"/> (<c>Fire(index, gesture)</c>, and the taps and
-			/// drags that are shortcuts of it).
+			/// A finger of the virtual touchscreen that follows a <see cref="UnityAutoTap.Gesture"/>
+			/// (<see cref="Simulate(int, UnityAutoTap.Gesture)"/>).
 			/// </summary>
 			Finger,
 
 			/// <summary>
 			/// A pointer other than a finger that follows a <see cref="UnityAutoTap.Gesture"/>
-			/// (<see cref="FirePointer"/>).
+			/// (<see cref="Simulate{TDevice}(UnityAutoTap.Gesture, int)"/>,
+			/// <see cref="Simulate(string, UnityAutoTap.Gesture, int)"/>).
 			/// </summary>
 			Pointer,
 
 			/// <summary>
-			/// A device that follows a <see cref="ControlSequence"/> (<see cref="FireDevice"/>).
+			/// A device that has no position and follows a <see cref="ControlSequence"/>
+			/// (<see cref="Simulate{TDevice}(ControlSequence, int)"/>, <see cref="Simulate(string, ControlSequence, int)"/>,
+			/// <see cref="Simulate(Key, float, Key[])"/>).
 			/// </summary>
 			Device,
 		}
@@ -131,7 +134,7 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// The record of one operation. It is returned by <c>Fire</c> as soon as the operation was accepted, and is
+		/// The record of one operation. It is returned by <c>Simulate</c> as soon as the operation was accepted, and is
 		/// filled in as the operation proceeds. Every returned item ends exactly once.
 		/// </summary>
 		/// <remarks>
@@ -166,7 +169,7 @@ namespace UnityAutoTap
 			public InputDevice Device;
 
 			/// <summary>
-			/// When <c>Fire</c> was called.
+			/// When <c>Simulate</c> was called.
 			/// </summary>
 			public DateTime DateTime;
 
@@ -182,7 +185,7 @@ namespace UnityAutoTap
 			public Vector2 ScreenPoint;
 
 			/// <summary>
-			/// <see cref="Time.frameCount"/> when <c>Fire</c> was called.
+			/// <see cref="Time.frameCount"/> when <c>Simulate</c> was called.
 			/// </summary>
 			public int FrameCount;
 
@@ -224,7 +227,7 @@ namespace UnityAutoTap
 			/// <para>
 			/// It is a prospect, not a record of a drag: the input module decides it when the pointer is pressed (it
 			/// is the object that receives <c>initializePotentialDrag</c> then), so it is worked out for the press
-			/// when <c>Fire</c> is called, again when the press is processed, and it stays for an operation that did
+			/// when <c>Simulate</c> is called, again when the press is processed, and it stays for an operation that did
 			/// not drag. <see cref="Dragged"/> tells whether the pointer was dragged.
 			/// </para>
 			/// </remarks>

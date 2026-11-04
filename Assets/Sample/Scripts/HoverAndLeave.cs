@@ -1,6 +1,7 @@
 #if ENABLE_AUTOTAP
 using UnityAutoTap;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace Sample
 {
@@ -105,7 +106,7 @@ namespace Sample
 				var away = new Vector2(on.x, Mathf.Min(on.y + 200f, Screen.height - 1f));
 
 				// HoldUntil waits for the UI to react to the input; its condition is evaluated once per Update.
-				_item = FireMouse(Gesture
+				_item = Simulate<Mouse>(Gesture
 					.HoverAt(on)
 					.HoldUntil(() => _target != null && _target.Hovered, 1f)
 					.Hold(0.2f)

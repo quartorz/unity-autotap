@@ -109,8 +109,8 @@ namespace UnityAutoTap.Tests
 			Assert.That(item.Device, Is.InstanceOf<Keyboard>());
 			Assert.That(item.Sequence, Is.Not.Null);
 			Assert.That(item.Gesture, Is.Null);
-			Assert.That(Keyboard.current, Is.Not.Null, "the keyboard was added by Fire");
-			Assert.That(Keyboard.current.spaceKey.isPressed, Is.False, "nothing is processed by Fire");
+			Assert.That(Keyboard.current, Is.Not.Null, "the keyboard was added by Simulate");
+			Assert.That(Keyboard.current.spaceKey.isPressed, Is.False, "nothing is processed by Simulate");
 			Frame();
 			Assert.That(Keyboard.current.spaceKey.isPressed, Is.True);
 			Assert.That(item.Order, Is.Not.Null);
@@ -174,11 +174,11 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void FireQueuesEveryStepAtTheStartThatTakesNoTimeAsAnEventOfItsOwn()
+		public void SimulateQueuesEveryStepAtTheStartThatTakesNoTimeAsAnEventOfItsOwn()
 		{
 			var item = _autoTap.Key(Key.R, 0.2f, Key.LeftCtrl, Key.LeftShift);
 
-			Assert.That(_changes, Is.Empty, "Fire processes nothing");
+			Assert.That(_changes, Is.Empty, "Simulate processes nothing");
 			Frame();
 
 			Assert.That(
@@ -190,7 +190,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void AStepThatTakesNoTimeIsQueuedByFireWhereverItIsInTheSequence()
+		public void AStepThatTakesNoTimeIsQueuedBySimulateWhereverItIsInTheSequence()
 		{
 			var item = _autoTap.Device(
 				"Gamepad", new ControlSequence().Hold(0f).Set("leftStick", Vector2.right).Press(GamepadButton.South).Hold(0.2f));
@@ -655,6 +655,31 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
+		public void ATypeAndTheNameOfItsLayoutOperateTheSameDevice()
+		{
+			var byType = _autoTap.Key(Key.A, 0.2f);
+
+			Assert.That(_autoTap.Device("Keyboard", new ControlSequence().Press(Key.B)), Is.Null, "the keyboard is taken by the key");
+			Assert.That(_autoTap.Device("keyboard", new ControlSequence().Press(Key.B)), Is.Null, "layout names do not depend on the case");
+			Assert.That(_autoTap.Device<Keyboard>(new ControlSequence().Press(Key.B)), Is.Null);
+			var pad = _autoTap.Device<Gamepad>(new ControlSequence().Press(GamepadButton.South).Hold(0.2f));
+			Assert.That(_autoTap.Gamepad(new ControlSequence().Press(GamepadButton.North)), Is.Null, "the gamepad of the type is taken");
+			Assert.That(_autoTap.Device("Gamepad", new ControlSequence().Press(GamepadButton.North)), Is.Null);
+
+			RunUntilCompleted(byType);
+			RunUntilCompleted(pad);
+			var byName = _autoTap.Device("Keyboard", new ControlSequence().Press(Key.B));
+			Assert.That(byName, Is.Not.Null);
+			RunUntilCompleted(byName);
+			var byTypeAgain = _autoTap.Device<Keyboard>(new ControlSequence().Press(Key.C));
+
+			Assert.That(byName.Device, Is.SameAs(byType.Device));
+			Assert.That(byTypeAgain.Device, Is.SameAs(byType.Device));
+			Assert.That(InputSystem.devices.Where(VirtualInput.IsVirtual).Select(d => d.name),
+				Is.EquivalentTo(new[] { "AutoTap-Keyboard-0", "AutoTap-Gamepad-0" }));
+		}
+
+		[Test]
 		public void ASequenceThatDoesNotFitTheDeviceThrowsAndTheDeviceIsNotTaken()
 		{
 			var pad = new ControlSequence();
@@ -669,8 +694,11 @@ namespace UnityAutoTap.Tests
 			Assert.Throws<ArgumentException>(() => _autoTap.Device("Keyboard", new ControlSequence().Press(GamepadButton.South)), "a gamepad button needs a gamepad");
 			Assert.Throws<ArgumentException>(() => _autoTap.Device("Keyboard", new ControlSequence().Press(Key.None)));
 			Assert.Throws<ArgumentException>(() => _autoTap.Device("Keyboard", new ControlSequence().Composition(new string('a', 64))));
-			Assert.Throws<ArgumentException>(() => _autoTap.Device("Mouse", new ControlSequence().Press("leftButton")), "a pointer is fired with FirePointer");
+			Assert.Throws<ArgumentException>(() => _autoTap.Device("Mouse", new ControlSequence().Press("leftButton")), "a pointer is operated with a gesture");
+			Assert.Throws<ArgumentException>(() => _autoTap.Device<Mouse>(new ControlSequence().Press("leftButton")), "a pointer type is operated with a gesture");
+			Assert.Throws<ArgumentException>(() => _autoTap.Device<Pen>(new ControlSequence().Press("tip")));
 			Assert.Throws<ArgumentException>(() => _autoTap.Device("Touchscreen", new ControlSequence().Press("primaryTouch/press")));
+			Assert.Throws<ArgumentException>(() => _autoTap.Device<Touchscreen>(new ControlSequence().Press("primaryTouch/press")));
 			Assert.Throws<ArgumentException>(() => _autoTap.Device("NoSuchLayout", new ControlSequence().Press("a")));
 			Assert.Throws<ArgumentException>(() => _autoTap.Gamepad(pad), "a sequence that writes nothing");
 			Assert.Throws<ArgumentException>(() => _autoTap.Gamepad(new ControlSequence().Hold(1f)));
@@ -680,7 +708,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void FireOnADisabledAutoTapReturnsNull()
+		public void SimulateOnADisabledAutoTapReturnsNull()
 		{
 			_autoTap.Stop();
 

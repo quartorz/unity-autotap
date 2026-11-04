@@ -30,52 +30,62 @@ namespace UnityAutoTap.Tests
 
 		public LogItem Tap(int index, Vector2 position, float duration)
 		{
-			return Fire(index, position, duration);
+			return Simulate(index, Gesture.PressAt(position).Hold(Mathf.Max(0f, duration)));
 		}
 
 		public LogItem Drag(int index, Vector2 from, Vector2 to, float duration)
 		{
-			return Fire(index, from, to, duration);
+			return Simulate(index, Gesture.PressAt(from).MoveTo(to, Mathf.Max(0f, duration)));
 		}
 
 		public LogItem Do(int index, Gesture gesture)
 		{
-			return Fire(index, gesture);
+			return Simulate(index, gesture);
 		}
 
 		public LogItem Pointer(string layout, Gesture gesture, int number = 0)
 		{
-			return FirePointer(layout, gesture, number);
+			return Simulate(layout, gesture, number);
+		}
+
+		public LogItem Pointer<TDevice>(Gesture gesture, int number = 0) where TDevice : UnityEngine.InputSystem.Pointer
+		{
+			return Simulate<TDevice>(gesture, number);
 		}
 
 		public LogItem Mouse(Gesture gesture, int number = 0)
 		{
-			return FireMouse(gesture, number);
+			return Simulate<Mouse>(gesture, number);
 		}
 
 		public LogItem Pen(Gesture gesture, int number = 0)
 		{
-			return FirePen(gesture, number);
+			return Simulate<Pen>(gesture, number);
 		}
 
 		public LogItem Scroll(Vector2 position, Vector2 delta)
 		{
-			return FireScroll(position, delta);
+			return Simulate<Mouse>(Gesture.HoverAt(position).Scroll(delta));
 		}
 
 		public LogItem Device(string layout, ControlSequence sequence, int number = 0)
 		{
-			return FireDevice(layout, sequence, number);
+			return Simulate(layout, sequence, number);
+		}
+
+		public LogItem Device<TDevice>(ControlSequence sequence, int number = 0) where TDevice : InputDevice
+		{
+			return Simulate<TDevice>(sequence, number);
 		}
 
 		public LogItem Gamepad(ControlSequence sequence, int number = 0)
 		{
-			return FireGamepad(sequence, number);
+			return Simulate<Gamepad>(sequence, number);
 		}
 
 		public LogItem Key(Key key, float duration = 0f, params Key[] modifiers)
 		{
-			return FireKey(key, duration, modifiers);
+			return Simulate(key, duration, modifiers);
 		}
 
 		public Action<float> PreUpdate;

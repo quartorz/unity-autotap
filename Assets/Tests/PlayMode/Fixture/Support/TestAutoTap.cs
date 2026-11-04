@@ -15,13 +15,13 @@ namespace UnityAutoTap.Tests
 	}
 
 	/// <summary>
-	/// An <see cref="AutoTapBase"/> that exposes the <c>Fire</c> methods, lets a test run code inside
+	/// An <see cref="AutoTapBase"/> that exposes the <c>Simulate</c> methods, lets a test run code inside
 	/// <see cref="AutoTapBase.Update(float)"/> and records the callbacks.
 	/// </summary>
 	public sealed class TestAutoTap : AutoTapBase
 	{
 		/// <summary>
-		/// Run once, at the start of the next <see cref="AutoTapBase.Update(float)"/>, which is where scenarios fire.
+		/// Run once, at the start of the next <see cref="AutoTapBase.Update(float)"/>, which is where scenarios start operations.
 		/// </summary>
 		public Action PreUpdateAction;
 
@@ -120,54 +120,64 @@ namespace UnityAutoTap.Tests
 			return new TestLogItem();
 		}
 
-		public LogItem FireTap(int index, Vector2 position, float duration)
+		public LogItem SimulateTap(int index, Vector2 position, float duration)
 		{
-			return Fire(index, position, duration);
+			return Simulate(index, Gesture.PressAt(position).Hold(Mathf.Max(0f, duration)));
 		}
 
-		public LogItem FireDrag(int index, Vector2 from, Vector2 to, float duration)
+		public LogItem SimulateDrag(int index, Vector2 from, Vector2 to, float duration)
 		{
-			return Fire(index, from, to, duration);
+			return Simulate(index, Gesture.PressAt(from).MoveTo(to, Mathf.Max(0f, duration)));
 		}
 
-		public LogItem FireFinger(int index, Gesture gesture)
+		public LogItem SimulateGesture(int index, Gesture gesture)
 		{
-			return Fire(index, gesture);
+			return Simulate(index, gesture);
 		}
 
-		public LogItem FirePointerGesture(string layout, Gesture gesture, int number = 0)
+		public LogItem SimulatePointerGesture(string layout, Gesture gesture, int number = 0)
 		{
-			return FirePointer(layout, gesture, number);
+			return Simulate(layout, gesture, number);
 		}
 
-		public LogItem FireDeviceSequence(string layout, ControlSequence sequence, int number = 0)
+		public LogItem SimulatePointerGesture<TDevice>(Gesture gesture, int number = 0) where TDevice : Pointer
 		{
-			return FireDevice(layout, sequence, number);
+			return Simulate<TDevice>(gesture, number);
 		}
 
-		public LogItem FireMouseGesture(Gesture gesture, int number = 0)
+		public LogItem SimulateDeviceSequence(string layout, ControlSequence sequence, int number = 0)
 		{
-			return FireMouse(gesture, number);
+			return Simulate(layout, sequence, number);
 		}
 
-		public LogItem FirePenGesture(Gesture gesture, int number = 0)
+		public LogItem SimulateDeviceSequence<TDevice>(ControlSequence sequence, int number = 0) where TDevice : InputDevice
 		{
-			return FirePen(gesture, number);
+			return Simulate<TDevice>(sequence, number);
 		}
 
-		public LogItem FireScrollAt(Vector2 screenPosition, Vector2 delta)
+		public LogItem SimulateMouseGesture(Gesture gesture, int number = 0)
 		{
-			return FireScroll(screenPosition, delta);
+			return Simulate<Mouse>(gesture, number);
 		}
 
-		public LogItem FireGamepadSequence(ControlSequence sequence, int number = 0)
+		public LogItem SimulatePenGesture(Gesture gesture, int number = 0)
 		{
-			return FireGamepad(sequence, number);
+			return Simulate<Pen>(gesture, number);
 		}
 
-		public LogItem FireKeyPress(Key key, float duration = 0f, params Key[] modifiers)
+		public LogItem SimulateScrollAt(Vector2 screenPosition, Vector2 delta)
 		{
-			return FireKey(key, duration, modifiers);
+			return Simulate<Mouse>(Gesture.HoverAt(screenPosition).Scroll(delta));
+		}
+
+		public LogItem SimulateGamepadSequence(ControlSequence sequence, int number = 0)
+		{
+			return Simulate<Gamepad>(sequence, number);
+		}
+
+		public LogItem SimulateKeyPress(Key key, float duration = 0f, params Key[] modifiers)
+		{
+			return Simulate(key, duration, modifiers);
 		}
 	}
 }

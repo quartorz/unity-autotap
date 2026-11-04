@@ -54,7 +54,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void FireQueuesThePressAndDoesNotProcessIt()
+		public void SimulateQueuesThePressAndDoesNotProcessIt()
 		{
 			var item = _autoTap.Tap(0, TestScene.At(0.5f, 0.5f), 0.1f);
 
@@ -105,7 +105,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void FireOnARunningSlotReturnsNull()
+		public void SimulateOnARunningSlotReturnsNull()
 		{
 			_autoTap.Tap(0, TestScene.At(0.5f, 0.5f), 1f);
 			Frame();
@@ -115,7 +115,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void FireOutsideTheScreenReturnsNull()
+		public void SimulateOutsideTheScreenReturnsNull()
 		{
 			Assert.That(_autoTap.Tap(0, new Vector2(-1, 10), 0f), Is.Null);
 			Assert.That(_autoTap.Tap(0, new Vector2(10, Screen.height + 1), 0f), Is.Null);
@@ -124,7 +124,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void FireWhileNotStartedReturnsNull()
+		public void SimulateWhileNotStartedReturnsNull()
 		{
 			_autoTap.Stop();
 
@@ -132,7 +132,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void FireOnASlotThatDoesNotExistThrows()
+		public void SimulateOnASlotThatDoesNotExistThrows()
 		{
 			Assert.Throws<ArgumentOutOfRangeException>(() => _autoTap.Tap(3, TestScene.At(0.5f, 0.5f), 0f));
 			Assert.Throws<ArgumentOutOfRangeException>(() => _autoTap.Tap(-1, TestScene.At(0.5f, 0.5f), 0f));
@@ -237,7 +237,7 @@ namespace UnityAutoTap.Tests
 		{
 			var destination = TestScene.At(0.3f, 0.3f);
 			var from = TestScene.At(0.5f, 0.5f);
-			var item = _autoTap.Do(0, Gesture.PressAt(from).Hold(0.05f).MoveTo(() => destination, 0.04f));
+			_autoTap.Do(0, Gesture.PressAt(from).Hold(0.05f).MoveTo(() => destination, 0.04f));
 
 			Frame(); // press processed; 0.04 s held
 			destination = TestScene.At(0.7f, 0.2f);
@@ -259,7 +259,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void TheStepsThatFollowThePressAndTakeNoTimeAreQueuedByFireAsEventsOfTheirOwn()
+		public void TheStepsThatFollowThePressAndTakeNoTimeAreQueuedBySimulateAsEventsOfTheirOwn()
 		{
 			var p = TestScene.At(0.2f, 0.2f);
 			var q = TestScene.At(0.6f, 0.4f);
@@ -282,7 +282,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void AStepThatTakesTimeIsLeftToTheFramesAfterFire()
+		public void AStepThatTakesTimeIsLeftToTheFramesAfterSimulate()
 		{
 			var p = TestScene.At(0.2f, 0.2f);
 			var q = TestScene.At(0.6f, 0.4f);
@@ -297,12 +297,12 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void AHoldUntilIsAskedByFireAndTheGestureIsOverAtOnceIfItIsMet()
+		public void AHoldUntilIsAskedBySimulateAndTheGestureIsOverAtOnceIfItIsMet()
 		{
 			var asked = 0;
 			var item = _autoTap.Do(0, Gesture.PressAt(TestScene.At(0.5f, 0.5f)).HoldUntil(() => ++asked > 0, 1f));
 
-			Assert.That(asked, Is.EqualTo(1), "Fire carried out the step");
+			Assert.That(asked, Is.EqualTo(1), "Simulate carried out the step");
 			Frame(); // the press is processed
 			Assert.That(item.Completed, Is.False, "what is pressed is not released by the update that pressed it");
 			Frame();
@@ -393,7 +393,7 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
-		public void FireReturnsNullWhenNoFingerIsFree()
+		public void SimulateReturnsNullWhenNoFingerIsFree()
 		{
 			using (var other = VirtualInput.Acquire())
 			{

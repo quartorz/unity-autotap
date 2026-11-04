@@ -8,7 +8,7 @@ using UnityEngine.UI;
 namespace UnityAutoTap
 {
 	/// <summary>
-	/// The base class of an auto tap. It operates virtual input devices as planned by what the subclass fires, and
+	/// The base class of an auto tap. It operates virtual input devices as planned by what the subclass simulates, and
 	/// the real <see cref="UnityEngine.InputSystem.UI.InputSystemUIInputModule"/> of the scene delivers the input to
 	/// the UI.
 	/// </summary>
@@ -26,7 +26,7 @@ namespace UnityAutoTap
 	/// </description></item>
 	/// </list>
 	/// <para>
-	/// Input is never delivered inside <c>Fire</c> or <see cref="Update(float)"/>. It is queued, processed by the
+	/// Input is never delivered inside <c>Simulate</c> or <see cref="Update(float)"/>. It is queued, processed by the
 	/// input update at the start of the next frame, and delivered to the UI by the event system.
 	/// </para>
 	/// <para>
@@ -34,17 +34,18 @@ namespace UnityAutoTap
 	/// </para>
 	/// <list type="bullet">
 	/// <item><description>
-	/// Slots. Slot <c>i</c> holds at most one finger at a time, started with <c>Fire(i, ...)</c>. The
+	/// Slots. Slot <c>i</c> holds at most one finger at a time, started with <c>Simulate(i, gesture)</c>. The
 	/// number of slots is given to the constructor, from 1 to 10, the number of touches that a touchscreen has.
 	/// </description></item>
 	/// <item><description>
-	/// Operations outside the slots, started with <see cref="FirePointer"/>, <see cref="FireDevice"/> and their
-	/// shortcuts. Each virtual device holds at most one at a time.
+	/// Operations outside the slots, started with the other <c>Simulate</c> methods: a pointer such as a mouse or a
+	/// pen with a <see cref="Gesture"/>, any other device with a <see cref="ControlSequence"/>, and a key. Each
+	/// virtual device holds at most one at a time.
 	/// </description></item>
 	/// </list>
 	/// <para>
 	/// The markers that show where the operations are on the screen are optional: <see cref="Update(float)"/> and
-	/// <c>Fire</c> work without <see cref="SetupMarkers"/>.
+	/// <c>Simulate</c> work without <see cref="SetupMarkers"/>.
 	/// </para>
 	/// </remarks>
 	public abstract partial class AutoTapBase : IDisposable
@@ -118,7 +119,7 @@ namespace UnityAutoTap
 		readonly List<KeyValuePair<long, LogItem>> _tail = new List<KeyValuePair<long, LogItem>>();
 		bool _logIsStale;
 		int _logFrame;
-		long _fireSequence;
+		long _startSequence;
 
 		readonly Vector3[] _fourCorners = new Vector3[4];
 		readonly float[] _floats = new float[4];
@@ -312,7 +313,7 @@ namespace UnityAutoTap
 
 			_scratch.Clear();
 			_scratch.AddRange(_operations);
-			_scratch.Sort((a, b) => a.FireSequence.CompareTo(b.FireSequence));
+			_scratch.Sort((a, b) => a.StartSequence.CompareTo(b.StartSequence));
 			var frame = Time.frameCount;
 			foreach (var operation in _scratch)
 			{
@@ -323,7 +324,7 @@ namespace UnityAutoTap
 
 				operation.Interrupt();
 				Complete(operation, EndReason.Interrupted, null, frame);
-				_tail.Add(new KeyValuePair<long, LogItem>(operation.FireSequence, operation.Item));
+				_tail.Add(new KeyValuePair<long, LogItem>(operation.StartSequence, operation.Item));
 				if (operation.Index >= 0)
 				{
 					_slots[operation.Index] = null;
@@ -394,13 +395,13 @@ namespace UnityAutoTap
 		/// input update has an empty sequence.
 		/// </para>
 		/// <para>
-		/// An operation fired in frame N is queued by <c>Fire</c> and processed by the input update of frame N + 1,
-		/// so it is in the sequence of frame N + 1. The <see cref="LogItem"/> that <c>Fire</c> returns is returned at
+		/// An operation started in frame N is queued by <c>Simulate</c> and processed by the input update of frame N + 1,
+		/// so it is in the sequence of frame N + 1. The <see cref="LogItem"/> that <c>Simulate</c> returns is returned at
 		/// once, before any of this.
 		/// </para>
 		/// <para>
 		/// Elements are ordered by <see cref="LogEvent.Order"/>. Elements without an order come after those that
-		/// have one, in the order the items were fired. They are <see cref="LogEventKind.Completed"/> of
+		/// have one, in the order the operations were started. They are <see cref="LogEventKind.Completed"/> of
 		/// <list type="bullet">
 		/// <item><description>
 		/// items that were dropped (<see cref="EndReason.Dropped"/>) by that input update,
@@ -417,7 +418,7 @@ namespace UnityAutoTap
 		/// </list>
 		/// </para>
 		/// <para>
-		/// The end of every <see cref="LogItem"/> that <c>Fire</c> returned is in exactly one sequence, once the
+		/// The end of every <see cref="LogItem"/> that <c>Simulate</c> returned is in exactly one sequence, once the
 		/// input updates it needs have run: the update that processes its release, or the next one after
 		/// <see cref="Stop"/>.
 		/// </para>
@@ -517,7 +518,7 @@ namespace UnityAutoTap
 
 		/// <summary>
 		/// Called once per <see cref="Update(float)"/> for each slot that is empty. Start an operation with
-		/// <c>Fire(index, ...)</c>.
+		/// <c>Simulate(index, gesture)</c>.
 		/// </summary>
 		/// <param name="index">The empty slot.</param>
 		protected virtual void Update(int index)

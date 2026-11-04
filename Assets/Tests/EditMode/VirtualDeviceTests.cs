@@ -46,6 +46,34 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
+		public void ATypeAndTheNameOfItsLayoutGiveTheSameDevice()
+		{
+			var keyboard = _session.GetDevice<Keyboard>();
+			var pad = _session.GetDevice("Gamepad");
+
+			Assert.That(_session.GetDevice("Keyboard"), Is.SameAs(keyboard), "added by the type, given by the name");
+			Assert.That(_session.GetDevice("keyboard"), Is.SameAs(keyboard), "layout names do not depend on the case");
+			Assert.That(_session.GetDevice<Gamepad>(), Is.SameAs(pad), "added by the name, given by the type");
+			Assert.That(_session.GetDevice<Keyboard>(1), Is.SameAs(_session.GetDevice("Keyboard", 1)));
+			Assert.That(_session.GetDevice<Keyboard>(1), Is.Not.SameAs(keyboard));
+			Assert.That(keyboard.Device, Is.InstanceOf<Keyboard>());
+			Assert.That(keyboard.Device.name, Is.EqualTo("AutoTap-Keyboard-0"));
+			Assert.That(InputSystem.devices.Count(VirtualInput.IsVirtual), Is.EqualTo(3), "Keyboard 0, Keyboard 1 and Gamepad 0");
+		}
+
+		[Test]
+		public void APointerTypeIsRefusedAndNothingIsLeftBehind()
+		{
+			Assert.Throws<ArgumentException>(() => _session.GetDevice<Mouse>());
+			Assert.Throws<ArgumentException>(() => _session.GetDevice<Pen>());
+			Assert.Throws<ArgumentException>(() => _session.GetDevice<Touchscreen>());
+			_session.GetPointer<Mouse>();
+			Assert.Throws<ArgumentException>(() => _session.GetDevice<Mouse>(), "the mouse of that number was given as a pointer");
+
+			Assert.That(InputSystem.devices, Has.Count.EqualTo(1));
+		}
+
+		[Test]
 		public void PointersAreGivenByGetPointerAndNothingIsLeftBehindWhenItFails()
 		{
 			Assert.Throws<ArgumentException>(() => _session.GetDevice("Mouse"));

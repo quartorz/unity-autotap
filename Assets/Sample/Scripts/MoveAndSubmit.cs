@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityAutoTap;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.UI;
 
@@ -134,7 +135,7 @@ namespace Sample
 					.Press(GamepadButton.South)
 					.HoldUntil(() => _pad.SubmitCount > submitted, 1f)
 					.Release(GamepadButton.South);
-				_item = FireGamepad(sequence);
+				_item = Simulate<Gamepad>(sequence);
 			}
 
 			static int IndexOf(IReadOnlyList<Button> buttons, GameObject selected)

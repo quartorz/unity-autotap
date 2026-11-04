@@ -9,18 +9,44 @@ namespace UnityAutoTap
 {
 	/// <remarks>
 	/// <para>
-	/// The <c>Fire</c> methods queue the steps at the start of an operation that take no time, and return its
+	/// The <c>Simulate</c> methods queue the steps at the start of an operation that take no time, and return its
 	/// <see cref="LogItem"/> at once. The operation is processed by the input update of the next frame (see
 	/// <see cref="GetLatestLogs"/>), and <see cref="Update(float)"/> queues the steps that follow once those were
 	/// processed. A <see cref="LogItem"/> that was returned ends exactly once.
 	/// </para>
 	/// <para>
-	/// The common rules of all <c>Fire</c> methods:
+	/// What is simulated is chosen by what is passed:
+	/// </para>
+	/// <list type="bullet">
+	/// <item><description>
+	/// <c>Simulate(slot, gesture)</c>: a finger of the virtual touchscreen, in a slot.
+	/// </description></item>
+	/// <item><description>
+	/// <c>Simulate&lt;Mouse&gt;(gesture)</c>, <c>Simulate("Mouse", gesture)</c>: a pointer other than a touchscreen
+	/// (a mouse, a pen), with a <see cref="Gesture"/>.
+	/// </description></item>
+	/// <item><description>
+	/// <c>Simulate&lt;Gamepad&gt;(sequence)</c>, <c>Simulate("Gamepad", sequence)</c>: any device that is not a
+	/// pointer (a keyboard, a gamepad, a joystick, a sensor, a custom layout), with a <see cref="ControlSequence"/>.
+	/// </description></item>
+	/// <item><description>
+	/// <c>Simulate(key)</c>: a key of the keyboard.
+	/// </description></item>
+	/// </list>
+	/// <para>
+	/// A type and the name of its layout select the same virtual device: <c>Simulate&lt;Mouse&gt;</c> and
+	/// <c>Simulate("Mouse")</c> operate the same mouse. A touchscreen is derived from <see cref="Pointer"/>, which a
+	/// type constraint cannot refuse, but it is operated only through the slots: <c>Simulate&lt;Touchscreen&gt;</c> and
+	/// <c>Simulate("Touchscreen", ...)</c> throw <see cref="ArgumentException"/>.
+	/// </para>
+	/// <para>
+	/// The common rules of all <c>Simulate</c> methods:
 	/// </para>
 	/// <list type="bullet">
 	/// <item><description>
 	/// A plan that cannot be carried out on the target (a control that the device does not have, a step that does not
-	/// fit the kind of device) is a usage error, and the method throws <see cref="ArgumentException"/>.
+	/// fit the kind of device, a pointer type given where a <see cref="ControlSequence"/> is operated and the other
+	/// way round) is a usage error, and the method throws <see cref="ArgumentException"/>.
 	/// </description></item>
 	/// <item><description>
 	/// A method returns <c>null</c> and queues nothing if a position of the plan is outside the screen, if the
@@ -36,10 +62,10 @@ namespace UnityAutoTap
 	/// device it operates.
 	/// </description></item>
 	/// <item><description>
-	/// The steps at the start of the plan that take no time are queued by <c>Fire</c> itself, in the order of the
+	/// The steps at the start of the plan that take no time are queued by <c>Simulate</c> itself, in the order of the
 	/// plan and each as an event of its own, by the same rule by which <see cref="Update(float)"/> queues the steps
-	/// of a frame: a step that takes no time is queued in the frame of <c>Fire</c> as long as no step before it took
-	/// time, whether or not it is the first step.
+	/// of a frame: a step that takes no time is queued in the frame of <c>Simulate</c> as long as no step before it
+	/// took time, whether or not it is the first step.
 	/// </description></item>
 	/// <item><description>
 	/// An operation never presses and releases in the same input update, even if its plan has no time between the
@@ -50,71 +76,59 @@ namespace UnityAutoTap
 	public abstract partial class AutoTapBase
 	{
 		/// <summary>
-		/// Taps: presses a finger at <paramref name="position"/>, holds it for <paramref name="duration"/> seconds and
-		/// releases it. It is <c>Fire(index, Gesture.PressAt(position).Hold(duration))</c>.
+		/// Operates a finger in a slot as planned by <paramref name="gesture"/>: a tap, a drag, a path, holding until a
+		/// condition is met, a long press followed by a drag, pressure, and so on.
 		/// </summary>
-		/// <param name="index">The slot, from 0 to the tap count minus 1.</param>
-		/// <param name="position">The position in screen pixels.</param>
-		/// <param name="duration">The time to hold, in seconds.</param>
-		/// <returns>The record of the operation, or <c>null</c> if it was not started (see the class remarks).</returns>
-		/// <exception cref="ArgumentException">The plan cannot be carried out.</exception>
-		protected internal LogItem Fire(int index, Vector2 position, float duration)
-		{
-			var gesture = Gesture.PressAt(position).Hold(Mathf.Max(0f, duration));
-			return FireFinger(index, gesture);
-		}
-
-		/// <summary>
-		/// Drags: presses a finger at <paramref name="from"/>, moves it in a straight line to <paramref name="to"/>
-		/// in <paramref name="duration"/> seconds and releases it. It is
-		/// <c>Fire(index, Gesture.PressAt(from).MoveTo(to, duration))</c>.
-		/// </summary>
-		/// <param name="index">The slot, from 0 to the tap count minus 1.</param>
-		/// <param name="from">The position of the press in screen pixels.</param>
-		/// <param name="to">The position of the release in screen pixels.</param>
-		/// <param name="duration">The time the move takes, in seconds.</param>
-		/// <returns>The record of the operation, or <c>null</c> if it was not started (see the class remarks).</returns>
-		/// <exception cref="ArgumentException">The plan cannot be carried out.</exception>
-		protected internal LogItem Fire(int index, Vector2 from, Vector2 to, float duration)
-		{
-			var gesture = Gesture.PressAt(from).MoveTo(to, Mathf.Max(0f, duration));
-			return FireFinger(index, gesture);
-		}
-
-		/// <summary>
-		/// Operates a finger as planned by <paramref name="gesture"/>: a path, holding until a condition is met,
-		/// a long press followed by a drag, pressure, and so on. Several fingers are moved together by firing several
+		/// <remarks>
+		/// <para>
+		/// A tap is <c>Gesture.PressAt(position).Hold(duration)</c>, and a drag is
+		/// <c>Gesture.PressAt(from).MoveTo(to, duration)</c>. Several fingers are moved together by simulating several
 		/// slots in the same frame.
-		/// </summary>
-		/// <param name="index">The slot, from 0 to the tap count minus 1.</param>
+		/// </para>
+		/// <para>
+		/// The first step and the steps after it that take no time are queued by this method, as events of their own
+		/// (see <see cref="Gesture"/>).
+		/// </para>
+		/// </remarks>
+		/// <param name="slot">The slot, from 0 to the slot count minus 1.</param>
 		/// <param name="gesture">The plan. It has to fit a finger.</param>
 		/// <returns>The record of the operation, or <c>null</c> if it was not started (see the class remarks).</returns>
 		/// <exception cref="ArgumentException">The plan cannot be carried out.</exception>
-		protected internal LogItem Fire(int index, Gesture gesture)
+		/// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is not a slot.</exception>
+		protected internal LogItem Simulate(int slot, Gesture gesture)
 		{
+			ThrowIfDisposed();
 			if (gesture == null)
 			{
 				throw new ArgumentNullException(nameof(gesture));
 			}
 
-			return FireFinger(index, gesture);
+			return SimulateFinger(slot, gesture);
 		}
 
 		/// <summary>
 		/// Operates a pointer device other than a touchscreen as planned by <paramref name="gesture"/>: hover, the
-		/// buttons of a mouse, a pen with pressure and tilt, scroll.
+		/// buttons of a mouse, a pen with pressure and tilt, scroll. The device is given by its type.
 		/// </summary>
 		/// <remarks>
 		/// <para>
 		/// The device is added to the Input System by the first call that names it, even if the call returns
-		/// <c>null</c> for another reason. Its position stays where the gesture left it, so the UI under it stays
-		/// hovered; the buttons and the other controls that are not marked <c>dontReset</c> go back to their
-		/// defaults when the gesture ends.
+		/// <c>null</c> for another reason. It is the device that <see cref="Simulate(string, Gesture, int)"/> operates
+		/// for the name of the layout of <typeparamref name="TDevice"/>. Its position stays where the gesture left it,
+		/// so the UI under it stays hovered; the buttons and the other controls that are not marked <c>dontReset</c> go
+		/// back to their defaults when the gesture ends.
+		/// </para>
+		/// <para>
+		/// <see cref="Touchscreen"/> is derived from <see cref="Pointer"/>, so the constraint cannot refuse it. It is
+		/// operated through the slots (<see cref="Simulate(int, Gesture)"/>); a touchscreen type makes this method throw
+		/// <see cref="ArgumentException"/>.
 		/// </para>
 		/// <para>
 		/// The first step and the steps after it that take no time are queued by this method, as events of their own
 		/// (see <see cref="Gesture"/>), so one input update processes them: hovering, writing a control and pressing
-		/// a button in a row reach the Input System together, in that order.
+		/// a button in a row reach the Input System together, in that order. Scrolling is a step of the gesture:
+		/// <c>Simulate&lt;Mouse&gt;(Gesture.HoverAt(position).Scroll(delta))</c>. The hover and the scroll are two events
+		/// of the same input update, which is enough for the input module to enter the UI under the mouse and scroll it.
 		/// </para>
 		/// <para>
 		/// The <see cref="LogItem"/> follows the first button that the gesture presses if the UI handles that button
@@ -122,18 +136,59 @@ namespace UnityAutoTap
 		/// press nothing, the fields about targets stay empty.
 		/// </para>
 		/// </remarks>
+		/// <typeparam name="TDevice">
+		/// The type of the device, for example <see cref="Mouse"/> or <see cref="Pen"/>. It has to be registered as a
+		/// layout of the Input System.
+		/// </typeparam>
+		/// <param name="gesture">The plan.</param>
+		/// <param name="number">Tells apart several devices of the same layout.</param>
+		/// <returns>The record of the operation, or <c>null</c> if it was not started (see the class remarks).</returns>
+		/// <exception cref="ArgumentException">
+		/// The plan cannot be carried out, or <typeparamref name="TDevice"/> is a touchscreen or is not registered as a
+		/// layout.
+		/// </exception>
+		protected internal LogItem Simulate<TDevice>(Gesture gesture, int number = 0) where TDevice : Pointer
+		{
+			ThrowIfDisposed();
+			if (gesture == null)
+			{
+				throw new ArgumentNullException(nameof(gesture));
+			}
+
+			var plan = gesture.PlanForPointer();
+			if (!Enabled)
+			{
+				return null;
+			}
+
+			return SimulatePointer(_input.GetPointer<TDevice>(number), gesture, plan);
+		}
+
+		/// <summary>
+		/// Operates a pointer device other than a touchscreen as planned by <paramref name="gesture"/>. The device is
+		/// given by the name of its layout, for a device that has no C# type.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// It is <see cref="Simulate{TDevice}(Gesture, int)"/> with the layout as a string: <c>Simulate("Mouse", gesture)</c>
+		/// and <c>Simulate&lt;Mouse&gt;(gesture)</c> operate the same virtual mouse. The rules are the same; see there.
+		/// </para>
+		/// <para>
+		/// A touchscreen is operated through the slots (<see cref="Simulate(int, Gesture)"/>); the layout of a
+		/// touchscreen makes this method throw <see cref="ArgumentException"/>.
+		/// </para>
+		/// </remarks>
 		/// <param name="layout">The layout of the device, derived from <see cref="Pointer"/>.</param>
 		/// <param name="gesture">The plan.</param>
 		/// <param name="number">Tells apart several devices of the same layout.</param>
 		/// <returns>The record of the operation, or <c>null</c> if it was not started (see the class remarks).</returns>
 		/// <exception cref="ArgumentException">
-		/// The plan cannot be carried out, or <paramref name="layout"/> is a touchscreen or not derived from
-		/// <see cref="Pointer"/>.
+		/// The plan cannot be carried out, or <paramref name="layout"/> is a touchscreen, is not derived from
+		/// <see cref="Pointer"/> or is not a layout.
 		/// </exception>
-		protected internal LogItem FirePointer(string layout, Gesture gesture, int number = 0)
+		protected internal LogItem Simulate(string layout, Gesture gesture, int number = 0)
 		{
 			ThrowIfDisposed();
-
 			if (gesture == null)
 			{
 				throw new ArgumentNullException(nameof(gesture));
@@ -150,7 +205,11 @@ namespace UnityAutoTap
 				return null;
 			}
 
-			var pointer = _input.GetPointer(layout, number);
+			return SimulatePointer(_input.GetPointer(layout, number), gesture, plan);
+		}
+
+		LogItem SimulatePointer(VirtualPointer pointer, Gesture gesture, PointerPlan plan)
+		{
 			pointer.ValidateGesture(gesture);
 			if (_deviceOperations.ContainsKey(pointer.Device))
 			{
@@ -186,7 +245,7 @@ namespace UnityAutoTap
 			var item = NewLogItem(-1) ?? new LogItem();
 			FillItem(item, -1, LogItemKind.Pointer, pointer.Device, plan.Start, target, dragTarget, gesture, null);
 
-			var operation = new PointerOperation(item, ++_fireSequence, pointer, gesture, plan.StepCount);
+			var operation = new PointerOperation(item, ++_startSequence, pointer, gesture, plan.StepCount);
 			operation.Refuses = position =>
 			{
 				var topmost = PointerPredictor.Probe(position).Topmost;
@@ -202,12 +261,13 @@ namespace UnityAutoTap
 
 		/// <summary>
 		/// Operates a device that has no position (a keyboard, a gamepad, a joystick, a sensor, a custom layout) as
-		/// planned by <paramref name="sequence"/>.
+		/// planned by <paramref name="sequence"/>. The device is given by its type.
 		/// </summary>
 		/// <remarks>
 		/// <para>
 		/// The device is added to the Input System by the first call that names it, even if the call returns
-		/// <c>null</c> for another reason.
+		/// <c>null</c> for another reason. It is the device that <see cref="Simulate(string, ControlSequence, int)"/>
+		/// operates for the name of the layout of <typeparamref name="TDevice"/>.
 		/// </para>
 		/// <para>
 		/// This method queues the steps at the start of the sequence that take no time (a press, a release, text, a
@@ -219,6 +279,51 @@ namespace UnityAutoTap
 		/// marked <c>dontReset</c> go back to their defaults. The controls of a sensor are noisy, which makes them
 		/// <c>dontReset</c>, so a sensor keeps the value that was set.
 		/// </para>
+		/// <para>
+		/// The constraint is <see cref="InputDevice"/> because the devices that are not pointers have no common type
+		/// below it. A pointer type (<see cref="Pointer"/> and everything derived from it, a touchscreen included) is
+		/// refused when the method is called: those are operated with a <see cref="Gesture"/>.
+		/// </para>
+		/// </remarks>
+		/// <typeparam name="TDevice">
+		/// The type of the device, for example <see cref="Keyboard"/> or <see cref="Gamepad"/>. It has to be registered
+		/// as a layout of the Input System.
+		/// </typeparam>
+		/// <param name="sequence">The plan.</param>
+		/// <param name="number">Tells apart several devices of the same layout.</param>
+		/// <returns>
+		/// The record of the operation, or <c>null</c> if it was not started (see the class remarks). Its
+		/// <see cref="LogItem.Target"/> and the other fields about targets stay empty.
+		/// </returns>
+		/// <exception cref="ArgumentException">
+		/// The plan cannot be carried out, or <typeparamref name="TDevice"/> is derived from <see cref="Pointer"/> or is
+		/// not registered as a layout.
+		/// </exception>
+		protected internal LogItem Simulate<TDevice>(ControlSequence sequence, int number = 0) where TDevice : InputDevice
+		{
+			ThrowIfDisposed();
+			if (sequence == null)
+			{
+				throw new ArgumentNullException(nameof(sequence));
+			}
+
+			sequence.RequireWrites();
+			if (!Enabled)
+			{
+				return null;
+			}
+
+			return SimulateDevice(_input.GetDevice<TDevice>(number), sequence);
+		}
+
+		/// <summary>
+		/// Operates a device that has no position as planned by <paramref name="sequence"/>. The device is given by the
+		/// name of its layout, for a device that has no C# type.
+		/// </summary>
+		/// <remarks>
+		/// It is <see cref="Simulate{TDevice}(ControlSequence, int)"/> with the layout as a string:
+		/// <c>Simulate("Gamepad", sequence)</c> and <c>Simulate&lt;Gamepad&gt;(sequence)</c> operate the same virtual
+		/// gamepad. The rules are the same; see there.
 		/// </remarks>
 		/// <param name="layout">The layout of the device, not derived from <see cref="Pointer"/>.</param>
 		/// <param name="sequence">The plan.</param>
@@ -228,68 +333,44 @@ namespace UnityAutoTap
 		/// <see cref="LogItem.Target"/> and the other fields about targets stay empty.
 		/// </returns>
 		/// <exception cref="ArgumentException">
-		/// The plan cannot be carried out, or <paramref name="layout"/> is derived from <see cref="Pointer"/>.
+		/// The plan cannot be carried out, or <paramref name="layout"/> is derived from <see cref="Pointer"/> or is not
+		/// a layout.
 		/// </exception>
-		protected internal LogItem FireDevice(string layout, ControlSequence sequence, int number = 0)
+		protected internal LogItem Simulate(string layout, ControlSequence sequence, int number = 0)
 		{
-			return FireDeviceSequence(layout, sequence, number);
-		}
+			ThrowIfDisposed();
+			if (sequence == null)
+			{
+				throw new ArgumentNullException(nameof(sequence));
+			}
 
-		/// <summary>
-		/// Operates a virtual mouse. It is <c>FirePointer("Mouse", gesture, number)</c>.
-		/// </summary>
-		/// <param name="gesture">The plan.</param>
-		/// <param name="number">Tells apart several mice.</param>
-		/// <returns>See <see cref="FirePointer"/>.</returns>
-		protected internal LogItem FireMouse(Gesture gesture, int number = 0)
-		{
-			return FirePointer("Mouse", gesture, number);
-		}
+			if (string.IsNullOrEmpty(layout))
+			{
+				throw new ArgumentException("The layout is empty.", nameof(layout));
+			}
 
-		/// <summary>
-		/// Operates a virtual pen. It is <c>FirePointer("Pen", gesture, number)</c>.
-		/// </summary>
-		/// <param name="gesture">The plan.</param>
-		/// <param name="number">Tells apart several pens.</param>
-		/// <returns>See <see cref="FirePointer"/>.</returns>
-		protected internal LogItem FirePen(Gesture gesture, int number = 0)
-		{
-			return FirePointer("Pen", gesture, number);
-		}
+			sequence.RequireWrites();
+			if (!Enabled)
+			{
+				return null;
+			}
 
-		/// <summary>
-		/// Scrolls the virtual mouse at <paramref name="screenPosition"/>. It is
-		/// <c>FireMouse(Gesture.HoverAt(screenPosition).Scroll(delta))</c>: the hover and the scroll are two events of
-		/// the same input update, which is enough for the input module to enter the UI under the mouse and scroll it.
-		/// </summary>
-		/// <param name="screenPosition">The position in screen pixels. The UI there receives the scroll.</param>
-		/// <param name="delta">The amount, in the unit of the <c>scroll</c> control of the mouse.</param>
-		/// <returns>See <see cref="FirePointer"/>.</returns>
-		protected internal LogItem FireScroll(Vector2 screenPosition, Vector2 delta)
-		{
-			return FireMouse(Gesture.HoverAt(screenPosition).Scroll(delta));
-		}
-
-		/// <summary>
-		/// Operates a virtual gamepad. It is <c>FireDevice("Gamepad", sequence, number)</c>.
-		/// </summary>
-		/// <param name="sequence">The plan.</param>
-		/// <param name="number">Tells apart several gamepads.</param>
-		/// <returns>See <see cref="FireDevice"/>.</returns>
-		protected internal LogItem FireGamepad(ControlSequence sequence, int number = 0)
-		{
-			return FireDevice("Gamepad", sequence, number);
+			return SimulateDevice(_input.GetDevice(layout, number), sequence);
 		}
 
 		/// <summary>
 		/// Presses a key of the virtual keyboard, holds it and releases it. The modifiers are pressed before the key
 		/// and released after it. No character is entered.
 		/// </summary>
+		/// <remarks>
+		/// It is <see cref="Simulate{TDevice}(ControlSequence, int)"/> of <see cref="Keyboard"/> with a sequence that
+		/// presses the modifiers and the key, holds, and releases them in the opposite order.
+		/// </remarks>
 		/// <param name="key">The key.</param>
 		/// <param name="duration">The time to hold the key, in seconds.</param>
 		/// <param name="modifiers">The modifier keys to hold while the key is held.</param>
-		/// <returns>See <see cref="FireDevice"/>.</returns>
-		protected internal LogItem FireKey(Key key, float duration = 0f, params Key[] modifiers)
+		/// <returns>See <see cref="Simulate{TDevice}(ControlSequence, int)"/>.</returns>
+		protected internal LogItem Simulate(Key key, float duration = 0f, params Key[] modifiers)
 		{
 			var sequence = new ControlSequence();
 			if (modifiers != null)
@@ -309,30 +390,11 @@ namespace UnityAutoTap
 				}
 			}
 
-			return FireDeviceSequence("Keyboard", sequence, 0);
+			return Simulate<Keyboard>(sequence);
 		}
 
-		LogItem FireDeviceSequence(string layout, ControlSequence sequence, int number)
+		LogItem SimulateDevice(VirtualDevice device, ControlSequence sequence)
 		{
-			ThrowIfDisposed();
-
-			if (sequence == null)
-			{
-				throw new ArgumentNullException(nameof(sequence));
-			}
-
-			if (string.IsNullOrEmpty(layout))
-			{
-				throw new ArgumentException("The layout is empty.", nameof(layout));
-			}
-
-			sequence.RequireWrites();
-			if (!Enabled)
-			{
-				return null;
-			}
-
-			var device = _input.GetDevice(layout, number);
 			var buttons = device.ResolveSequence(sequence);
 			if (_deviceOperations.ContainsKey(device.Device))
 			{
@@ -342,7 +404,7 @@ namespace UnityAutoTap
 			var item = NewLogItem(-1) ?? new LogItem();
 			FillItem(item, -1, LogItemKind.Device, device.Device, Vector2.zero, null, null, null, sequence);
 
-			var operation = new DeviceOperation(item, ++_fireSequence, device, sequence, buttons);
+			var operation = new DeviceOperation(item, ++_startSequence, device, sequence, buttons);
 			_operations.Add(operation);
 			_deviceOperations.Add(device.Device, operation);
 			operation.QueueInitialSteps();
@@ -386,10 +448,8 @@ namespace UnityAutoTap
 			item.Sequence = sequence;
 		}
 
-		LogItem FireFinger(int index, Gesture gesture)
+		LogItem SimulateFinger(int index, Gesture gesture)
 		{
-			ThrowIfDisposed();
-
 			if (index < 0 || index >= _slots.Length)
 			{
 				throw new ArgumentOutOfRangeException(nameof(index), $"The slot has to be between 0 and {_slots.Length - 1}.");
@@ -434,7 +494,7 @@ namespace UnityAutoTap
 
 			FillItem(item, index, LogItemKind.Finger, finger.Device, plan.Start, probe.Press, probe.Drag, gesture, null);
 
-			var operation = new FingerOperation(index, item, ++_fireSequence, finger, gesture, plan.StepCount);
+			var operation = new FingerOperation(index, item, ++_startSequence, finger, gesture, plan.StepCount);
 
 			finger.Press(plan.Start);
 			_slots[index] = operation;
@@ -448,11 +508,11 @@ namespace UnityAutoTap
 		/// <summary>
 		/// Decides whether a press is made at a point. It is asked for each press of a finger or a pointer, with the
 		/// topmost result of <see cref="EventSystem.RaycastAll"/> at that point: the object the input module treats
-		/// as the first hit. It is not asked when nothing is hit, nor for hovering, nor for operations of
-		/// <see cref="FireDevice"/>.
+		/// as the first hit. It is not asked when nothing is hit, nor for hovering, nor for operations of a device
+		/// that has no position (<see cref="Simulate{TDevice}(ControlSequence, int)"/>).
 		/// </summary>
 		/// <remarks>
-		/// When it returns <c>true</c> the press is not made. For the first press of an operation <c>Fire</c> returns
+		/// When it returns <c>true</c> the press is not made. For the first press of an operation <c>Simulate</c> returns
 		/// <c>null</c>; for a later press the operation releases what it holds and ends with
 		/// <see cref="EndReason.Refused"/>. The objects behind the topmost one are not tried.
 		/// </remarks>
@@ -464,7 +524,7 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// Creates the <see cref="LogItem"/> that <c>Fire</c> returns. Override it to return an instance of a class
+		/// Creates the <see cref="LogItem"/> that <c>Simulate</c> returns. Override it to return an instance of a class
 		/// derived from <see cref="LogItem"/>.
 		/// </summary>
 		/// <remarks>
