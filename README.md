@@ -124,8 +124,9 @@ auto tap: before `Start` and after `Stop`, `Simulate` returns `null` before it l
 [What a `Simulate` method does](#what-a-simulate-method-does)).
 
 The `Simulate` methods are `protected internal` members of `AutoTapBase`, and `Scenario` has the same methods, as
-`protected` members that forward to its owner. `LogItem`, `LogEvent`, `LogEventKind`, `LogItemKind` and `EndReason` are
-types nested in `AutoTapBase`.
+`protected` members that forward to its owner. `LogItem`, `LogEvent`, `LogEventKind`, `LogEventSequence`, `LogItemKind`
+and `EndReason` are types nested in `AutoTapBase`. The steps of a plan are `Gesture.Step` and `Gesture.StepKind`, and
+`ControlSequence.Step` and `ControlSequence.StepKind`.
 
 ### Fingers and pointers: `Gesture`
 
@@ -433,9 +434,9 @@ filled in afterwards.
 |---|---|
 | `Index`, `Kind`, `Device` | the slot (`-1` outside the slots), the kind of operation and the virtual device that was operated. `Kind` is `Finger` for `Simulate(slot, ...)`, `Pointer` for a `Gesture` on a pointer other than a touchscreen, and `Device` for a `ControlSequence` and for `Simulate(Key, ...)` |
 | `FrameCount`, `DateTime`, `ScreenPoint` | what was asked for, when `Simulate` was called. `ScreenPoint` is the position of the first press or hover, and zero for a device without a position |
-| `EndScreenPoint` (`Vector2?`) | where the finger or pointer is put last. Until the operation ends it is where the plan puts it, after that where it was put: `Completed` tells which. `null` while the plan does not tell (the destination of `MoveTo(Func<Vector2>)` is not known before the move starts), and always `null` for a device |
-| `Duration` (`float?`) | how long the operation takes, in seconds. Until the operation ends it is the sum of the seconds of the steps, after that the time it took: `Completed` tells which. `null` while the plan does not tell, as with a `HoldUntil`. Both are counted in the seconds that are passed to `Update(float)` |
-| `CurrentStep` | the step that is being carried out, as an index into `Gesture.Steps` or `ControlSequence.Steps`. It is -1 before the operation starts, and after the operation ended it is the index of the last step |
+| `EndScreenPoint` (`Vector2?`) | where the finger or pointer is put last, in screen pixels. Until the operation ends it is the position that the plan gives: the position of the last step that moves the pointer, which is `ScreenPoint` for a plan that moves it nowhere. It is `null` while the plan does not give it: the destination of `MoveTo(Func<Vector2>)` is known from the moment that move starts. After the operation ended it is the position where it actually put the pointer last, which differs from the plan if the operation did not carry the plan out. `Completed` tells which. Always `null` for a device |
+| `Duration` (`float?`) | how long the operation lasts, in seconds, counted in the `deltaTime` that is passed to `Update(float)`. Until the operation ends it is the time that the plan takes: the sum of the seconds of its steps. A `HoldUntil` step takes as long as it waits, so it adds nothing until its condition is met, and the value is `null` until every `HoldUntil` of the plan has met its condition; if one times out, the value stays `null` until the operation ended. After the operation ended it is the sum of the `deltaTime` values that `Update(float)` passed to the plan, which is zero for an operation that never ran (`Dropped`). If the operation carried the plan out, that sum is at least the time of the plan and exceeds it by less than one `deltaTime`. `Completed` tells which |
+| `CurrentStep` (`int`) | the index of the step that the operation is carrying out, in `Gesture.Steps` of `Gesture` or in `ControlSequence.Steps` of `Sequence`. It is -1 until the operation is under way, and for an operation that ended without having been. A finger is under way once the Input System processed its press (`Order` is set); a pointer or a device, once it processed what the steps queued by `Simulate` wrote, or at once if they wrote nothing. When the operation ended it is the index of the last step if it is `Finished`, and otherwise the index of the step that the operation was at, which is -1 for `Dropped` |
 | `Order`, `StartedFrameCount` | the number of the change that started the operation and the frame it was processed in. `null` and `0` until then |
 | `DragStartedOrder`, `DragStartedFrameCount`, `Dragged` | the change that moved the pointer beyond the drag threshold, which is when begin-drag is delivered, and whether that happened: `Dragged` |
 | `CompletedOrder`, `CompletedFrameCount`, `Completed`, `EndReason` | the change that ended the operation, and why: `Finished`, `Interrupted` (`Stop`, the Input System reset the device, or it discarded an event of the operation after it had started, such as the release), `TimedOut`, `Dropped` (the Input System discarded the event that would have started it), `Refused`. `CompletedOrder` is `null` when no processed change ended the operation: `Dropped`, ended by `Stop`, or an operation whose end changes no control, such as a hover that presses nothing. |
@@ -446,14 +447,23 @@ A `LogItem` is changed in place while the operation proceeds. The `LogEvent`s th
 (`Started`, `DragStarted`, `Completed`) all refer to the same `LogItem`, so reading it gives its state now, not its state
 at the time of the event. To know a value at the time of an event, read it in the frame of that event or make a copy of it.
 
-Some fields hold the value that is known now. `Target` and `DragTarget` are a prediction that is made when `Simulate` is
-called and worked out again when the press is processed. `EndScreenPoint` and `Duration` are the planned value until the
-operation ends, and the actual value after that.
+Some fields hold what is known so far: `Target`, `DragTarget`, `ClickTarget`, `EndScreenPoint`, `Duration` and
+`CurrentStep`, and the fields that say whether something happened. `Target` and `DragTarget` are a prediction that is
+made when `Simulate` is called and worked out again when the press is processed. `EndScreenPoint` and `Duration` are the
+value that the plan gives until the operation ends, and the actual value after that. `CurrentStep` follows the operation.
 
-The plan can be read. `Gesture.Steps` and `ControlSequence.Steps` are read-only lists (`IReadOnlyList`) of the steps, in
-the order they run. A step is a read-only struct with a kind (an enum) and its values: a position, a number of seconds,
-a button, the path of a control, a value, a condition. The step of `MoveTo(Func<Vector2>)` or `HoldUntil(Func<bool>)`
-holds that delegate. `CurrentStep` is an index into these lists. Do not modify a plan after it was passed to `Simulate`.
+The plan can be read. `Gesture.Steps` is an `IReadOnlyList<Gesture.Step>` and `ControlSequence.Steps` an
+`IReadOnlyList<ControlSequence.Step>`: the steps as they were given, in the order they run. A list is a read-only view
+of the plan, not a copy, so a step that is added to the plan later shows up in it; do not modify a plan after it was
+passed to `Simulate`. `CurrentStep` is an index into these lists.
+
+A step is a read-only struct. `Kind`, an enum (`Gesture.StepKind` or `ControlSequence.StepKind`), tells what it does, and
+the other members hold the values of that kind; the ones that the kind does not use are `null`, zero or empty.
+
+| Step | Kinds | Members |
+|---|---|---|
+| `Gesture.Step` | `Press`, `Release`, `Hover`, `Move`, `Scroll`, `Set`, `Hold`, `HoldUntil` | `Position` (`Vector2?`: of `PressAt`, `HoverAt` and a `MoveTo` that was given a position), `PositionFunc` (the `Func<Vector2>` of the other `MoveTo`), `Button` (of `Press` and `Release`; `null` is the primary button), `Delta` (of `Scroll`), `Path`, `Value` and `ValueType` (of `Set`), `Seconds` (of `Move`, `Set` and `Hold`, and the timeout of `HoldUntil`), `Condition` (of `HoldUntil`) |
+| `ControlSequence.Step` | `Press`, `Release`, `Set`, `Text`, `Composition`, `Hold`, `HoldUntil` | `Control` (of `Press`, `Release` and `Set`: the path, a `string`, or for a press and a release a `Key` or a `GamepadButton`), `Value` and `ValueType` (of `Set`), `Text` (of `Text` and `Composition`), `Seconds` (of `Set` and `Hold`, and the timeout of `HoldUntil`), `Condition` (of `HoldUntil`) |
 
 An item that `Simulate` returned ends exactly once.
 
@@ -471,10 +481,10 @@ pointer dragged is `Dragged`, which is `true` once the pointer moved beyond the 
 the change that did it. `DropTarget` is the other way round: no drop is delivered for a pointer that did not drag, so it
 stays `null` unless `Dragged` is `true`.
 
-`LogItem.ToString` shows the kind, the slot, the frame, the duration, the time, the position of the press, the end
-position and the object that gets the press. What is `null` is left out: an item with no `Duration` has no `Duration:`,
-and one with no end position has no `→`. `GameObject: (none)` means that there is no `Target`. The steps are not shown.
-For a device, the second line is `Device:` and its name.
+`LogItem.ToString` shows the kind, the slot, the frame, the duration (with two decimals), the time, the position of the
+press, the end position and the object that gets the press. What is `null` is left out: an item with no `Duration` has
+no `Duration:`, and one with no end position has no `→`. `GameObject: (none)` means that there is no `Target`. The steps
+are not shown. For a device, the second line is `Device:` and its name.
 
 ```
 Finger Index: 0 FrameCount: 123, Duration: 0.10, DateTime: 11/04/2026 12:00:00
@@ -495,18 +505,23 @@ foreach (var e in GetLatestLogs())
 }
 ```
 
-- The return value is a struct that holds the sequence, made like `List<T>.Enumerator`. A `foreach` over it allocates
-  nothing, and it has `Count` and an indexer. It also implements `IEnumerable<LogEvent>`, so that LINQ works; that path
-  allocates.
-- The sequence is valid until the next Dynamic input update. After the sequence was rebuilt, enumerating it or reading
-  an element by its index throws `InvalidOperationException`. To use the elements later, make a copy (for example with
-  `ToArray()`).
+- The return value is a `LogEventSequence`, a readonly struct that implements `IReadOnlyList<LogEvent>`. It is a view of
+  the log of the auto tap, not a copy. A `foreach` over it, `Count` and the indexer allocate nothing. Going through
+  LINQ or `IEnumerable<LogEvent>` boxes the enumerator, which allocates. A `default` value is an empty sequence.
+- The sequence is valid until the next Dynamic input update starts. After that, enumerating it, reading its `Count` and
+  reading an element all throw `InvalidOperationException`, also when the new sequence is empty. An index outside the
+  sequence throws `ArgumentOutOfRangeException`. To use the elements later, make a copy (for example with `ToArray()`).
 - The sequence is rebuilt at the start of every Dynamic input update, not at the start of `Update(float)`. An operation
   simulated in frame N is in the sequence of frame N + 1, and can be read in `OnPreUpdate`, `Update(int)`,
   `OnPostUpdate` and after `Update(float)` of that frame.
 - The auto tap listens to the input updates from its construction until `Dispose`, whether or not it is started. So the
   sequence is always the one of the latest update, also before `Start`, after `Stop` and after the virtual input was
-  removed: it is rebuilt then, and empty if nothing happened. Dispose an auto tap that was never started, too.
+  removed: it is rebuilt then, and empty if nothing happened. `Dispose` empties it and makes the sequences that were
+  returned invalid. Dispose an auto tap that was never started, too.
+- What happens between two input updates is not in the sequence of the update before it. For example, when the Input
+  System resets a device (`InputSystem.ResetDevice`, or disabling it), the operations that use it end at that moment.
+  Their `Completed` elements are in the sequence of the next input update, at the position of their sequence number,
+  which is before the changes that update processes. The `LogItem` itself is changed at once.
 - When several things happened to one item in one input update, they are several elements.
 - Elements are ordered by `Order`. The elements without a number come after the others, in the order the items were
   simulated. They are the `Completed` of
@@ -711,12 +726,16 @@ its constructor too.
   pressed with `Simulate(slot, gesture)`.
 - `Scenario.TryTap` stays. It works out the point from a `RectTransform` and judges whether the press reaches `target`;
   it calls `Simulate(index, Gesture.PressAt(point).Hold(duration))`.
-- `GetLatestLogs()` returns a struct that holds the sequence, not an `IEnumerable<LogEvent>`. It is still the sequence of
-  what happened in the latest Dynamic input update, and a `foreach` over it works as before, but it allocates nothing
-  now. The sequence is valid only until the next Dynamic input update: after that, enumerating it or reading an element
-  by its index throws `InvalidOperationException`. In 2.0.0 the result was a copy that stayed valid, so make a copy of
-  the elements now if you keep them for later (for example with `ToArray()`). The sequence is rebuilt in every Dynamic
-  input update from the construction of the auto tap until `Dispose`, and is empty if nothing happened in it.
+- `GetLatestLogs()` returns an `AutoTapBase.LogEventSequence`, a readonly struct that implements
+  `IReadOnlyList<LogEvent>`, not an `IEnumerable<LogEvent>`. It is still the sequence of what happened in the latest
+  Dynamic input update, and a `foreach`, LINQ and a variable of the type `IEnumerable<LogEvent>` still compile; a
+  `foreach`, `Count` and the indexer allocate nothing now, and going through LINQ or `IEnumerable<LogEvent>` allocates.
+  The sequence is valid only until the next Dynamic input update starts: after that, enumerating it, reading its
+  `Count` and reading an element throw `InvalidOperationException`. In 2.0.0 the result was a copy that stayed valid,
+  so make a copy of the elements now if you keep them for later (for example with `ToArray()`). The sequence is
+  rebuilt in every Dynamic input update from the construction of the auto tap until `Dispose`, and is empty if nothing
+  happened in it. What happens between two input updates, such as the reset of a device, is in the sequence of the next
+  update.
 - `LogItem.ToString` starts with the kind (`Finger`, `Pointer` or `Device`). It shows `EndScreenPoint` after
   `ScreenPoint`, where 2.0.0 showed `DragTo`, and it shows `Duration`. It leaves out what is `null`.
 
@@ -727,8 +746,8 @@ its constructor too.
   the actual value after that (`Completed` tells which), and `null` while the plan does not tell. They are not the
   members that were removed: `DragTo` was `null` for an operation that does not move, while `EndScreenPoint` is not,
   and the old `Duration` was the number that you passed to `Fire`.
-- `Gesture.Steps` and `ControlSequence.Steps`: the plan as a read-only list of steps. `LogItem.CurrentStep`: the index
-  of the step that is being carried out.
+- `Gesture.Steps` and `ControlSequence.Steps`: the plan as a read-only list of steps (`Gesture.Step`,
+  `ControlSequence.Step`). `LogItem.CurrentStep`: the index of the step that is being carried out.
 
 What to write instead:
 
@@ -791,8 +810,8 @@ some things that were true in v1 are not true any more.
 **Log**
 - `GetLatestLogs()` returns what happened in the latest input update, in processing order (`Started`, `DragStarted`,
   `Completed`), as a sequence of `LogEvent`; v1 returned the `LogItem`s of the slots that were active. The sequence is
-  empty if nothing happened in that update. It is a struct that allocates nothing in a `foreach`, and it is valid until
-  the next Dynamic input update (see [`GetLatestLogs()`](#getlatestlogs)). The ends of items that were dropped, that
+  empty if nothing happened in that update. It is a `LogEventSequence`, a struct that allocates nothing in a `foreach`,
+  and it is valid until the next Dynamic input update (see [`GetLatestLogs()`](#getlatestlogs)). The ends of items that were dropped, that
   `Stop` ended, or that changed nothing at their end come last, without a number. `GetLatestCompletedLogs()` is removed.
 - `LogItem` has other fields. `DragTo` of v1 is `EndScreenPoint` now, and `Duration` is a `float?`. Both are the planned
   value until the operation ends and the actual value after that, and `null` while the plan does not tell.

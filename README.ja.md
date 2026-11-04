@@ -93,7 +93,7 @@ LogItem Simulate(Key key, float duration = 0f, params Key[] modifiers);
 
 **指は `Touchscreen` ではなく、スロットで押します。** `Touchscreen` は `Pointer` の派生なので、`where TDevice : Pointer` の制約では弾けません。`Simulate<Touchscreen>(...)` と `Simulate("Touchscreen", ...)` はコンパイルでき、実行時に `ArgumentException` を投げます。`Simulate(int slot, Gesture)` を使ってください。この例外を投げるのは、開始している auto tap です。`Start` の前と `Stop` のあとは、`Simulate` はデバイスを見る前に `null` を返します（[`Simulate` がすること](#simulate-がすること)を参照）。
 
-`Simulate` は `AutoTapBase` の `protected internal` のメンバーです。`Scenario` には同じメソッドが `protected` のメンバーとしてあり、持ち主に転送します。`LogItem`、`LogEvent`、`LogEventKind`、`LogItemKind`、`EndReason` は `AutoTapBase` の入れ子の型です。
+`Simulate` は `AutoTapBase` の `protected internal` のメンバーです。`Scenario` には同じメソッドが `protected` のメンバーとしてあり、持ち主に転送します。`LogItem`、`LogEvent`、`LogEventKind`、`LogEventSequence`、`LogItemKind`、`EndReason` は `AutoTapBase` の入れ子の型です。手順のステップは、`Gesture.Step` と `Gesture.StepKind`、`ControlSequence.Step` と `ControlSequence.StepKind` です。
 
 ### 指と pointer: `Gesture`
 
@@ -337,9 +337,9 @@ _item = Simulate<Gamepad>(sequence);
 |---|---|
 | `Index`、`Kind`、`Device` | スロット（スロットの外は `-1`）、操作の種類、操作した仮想デバイス。`Kind` は、`Simulate(slot, ...)` なら `Finger`、タッチスクリーン以外の pointer に `Gesture` を渡したなら `Pointer`、`ControlSequence` を渡したときと `Simulate(Key, ...)` なら `Device` |
 | `FrameCount`、`DateTime`、`ScreenPoint` | 求めたこと。`Simulate` を呼んだときのもの。`ScreenPoint` は最初の押しまたは hover の位置で、位置のないデバイスでは 0 |
-| `EndScreenPoint`（`Vector2?`） | 指や pointer を最後に置く位置。操作が終わるまでは手順で決まっている位置、終わったあとは実際に置いた位置で、どちらかは `Completed` で分かる。手順から決まらないうちは `null`（`MoveTo(Func<Vector2>)` の行き先は、動き始めるまで分からない）。デバイスでは常に `null` |
-| `Duration`（`float?`） | 操作にかかる時間（秒）。操作が終わるまでは各ステップの秒数の合計、終わったあとは実際にかかった時間で、どちらかは `Completed` で分かる。手順から決まらないうちは `null`（`HoldUntil` がある場合など）。どちらも、`Update(float)` に渡した秒数で数える |
-| `CurrentStep` | いま実行しているステップ。`Gesture.Steps` か `ControlSequence.Steps` の添字。操作が始まる前は -1、終わったあとは最後のステップの添字 |
+| `EndScreenPoint`（`Vector2?`） | 指や pointer を最後に置く位置（画面のピクセル）。操作が終わるまでは、手順が示す位置で、pointer を動かす最後のステップの位置。pointer をどこにも動かさない手順では `ScreenPoint` と同じ。手順が示さないうちは `null`。`MoveTo(Func<Vector2>)` の行き先は、その動きが始まった時点から分かる。終わったあとは、実際に最後に置いた位置で、操作が手順を最後まで実行しなかったときは、手順の位置と違うことがある。どちらかは `Completed` で分かる。デバイスでは常に `null` |
+| `Duration`（`float?`） | 操作が続く時間（秒）。`Update(float)` に渡した `deltaTime` で数える。操作が終わるまでは、手順がかける時間で、ステップの秒数の合計。`HoldUntil` は待った時間だけかかるので、condition が満たされるまでは何も足さず、手順にあるすべての `HoldUntil` の condition が満たされるまで、値は `null`。どれかがタイムアウトしたら、操作が終わるまで `null` のまま。終わったあとは、手順に `Update(float)` が渡した `deltaTime` の合計で、一度も動かなかった操作（`Dropped`）では 0。手順を最後まで実行したときは、手順の時間以上で、超える分は `deltaTime` 1 つぶんより小さい。どちらかは `Completed` で分かる |
+| `CurrentStep`（`int`） | 操作が実行しているステップの添字。`Gesture` の `Gesture.Steps`、または `Sequence` の `ControlSequence.Steps` の添字。操作が進み始めるまでは -1。進み始めずに終わった操作も -1。指は、Input System が押しを処理したとき（`Order` が入ったとき）に進み始める。pointer とデバイスは、`Simulate` がキューに入れたステップの書き込みを処理したとき、何も書き込まないならすぐに進み始める。操作が終わったあとは、`Finished` なら最後のステップの添字、それ以外なら終わったときにいたステップの添字で、`Dropped` では -1 |
 | `Order`、`StartedFrameCount` | 操作を始めた変化の番号と、それが処理されたフレーム。それまでは `null` と `0` |
 | `DragStartedOrder`、`DragStartedFrameCount`、`Dragged` | pointer をドラッグのしきい値より先へ動かした変化（begin-drag が届くとき）と、それが起きたかどうか: `Dragged` |
 | `CompletedOrder`、`CompletedFrameCount`、`Completed`、`EndReason` | 操作を終わらせた変化と、その理由: `Finished`、`Interrupted`（`Stop`、Input System がデバイスをリセットした、または操作の始まったあとに、離しなどのイベントを Input System が捨てた）、`TimedOut`、`Dropped`（始めるはずだったイベントを Input System が捨てた）、`Refused`。処理された変化が操作を終わらせていないときは、`CompletedOrder` が `null` になる: `Dropped`、`Stop` が終わらせたもの、終わりでどの control も変わらない操作（何も押さない hover など）。 |
@@ -348,9 +348,16 @@ _item = Simulate<Gamepad>(sequence);
 
 `LogItem` は、操作が進むあいだ、その場で書き換わります。`GetLatestLogs()` が 1 つの item について返す `LogEvent`（`Started`、`DragStarted`、`Completed`）は、どれも同じ `LogItem` を指します。そのため、読めるのはイベントが起きた時点の状態ではなく、今の状態です。イベントの時点の値が要るときは、そのイベントが起きたフレームのうちに読むか、写しを取ってください。
 
-フィールドには、今分かっている値を入れるものがあります。`Target` と `DragTarget` は、`Simulate` を呼んだときに立てた予測で、押しが処理されるときに求め直されます。`EndScreenPoint` と `Duration` は、操作が終わるまでは手順の値、終わったあとは実際の値です。
+フィールドには、今までに分かっていることを入れるものがあります。`Target`、`DragTarget`、`ClickTarget`、`EndScreenPoint`、`Duration`、`CurrentStep` と、何かが起きたかどうかを示すフィールドです。`Target` と `DragTarget` は、`Simulate` を呼んだときに立てた予測で、押しが処理されるときに求め直されます。`EndScreenPoint` と `Duration` は、操作が終わるまでは手順が示す値、終わったあとは実際の値です。`CurrentStep` は操作に合わせて進みます。
 
-手順は読めます。`Gesture.Steps` と `ControlSequence.Steps` は、ステップを実行する順に並べた、読み取り専用の `IReadOnlyList` です。1 つのステップは、enum の種類と値を持つ、読み取り専用の struct です。値は、位置、秒数、ボタン、control のパス、値、condition などです。`MoveTo(Func<Vector2>)` と `HoldUntil(Func<bool>)` のステップは、その delegate を持ちます。`CurrentStep` は、このリストの添字です。手順は、`Simulate` に渡したあとで変更しないでください。
+手順は読めます。`Gesture.Steps` は `IReadOnlyList<Gesture.Step>`、`ControlSequence.Steps` は `IReadOnlyList<ControlSequence.Step>` で、渡したとおりのステップを、実行する順に並べています。リストは手順を読み取り専用で参照するもので、写しではありません。そのため、手順にあとから足したステップもリストに現れます。手順は、`Simulate` に渡したあとで変更しないでください。`CurrentStep` は、このリストの添字です。
+
+ステップは、読み取り専用の struct です。`Kind` は何をするかを示す enum（`Gesture.StepKind` か `ControlSequence.StepKind`）で、ほかのメンバーが、その種類の値を持ちます。その種類が使わないメンバーは、`null`、0、空のどれかです。
+
+| ステップ | 種類 | メンバー |
+|---|---|---|
+| `Gesture.Step` | `Press`、`Release`、`Hover`、`Move`、`Scroll`、`Set`、`Hold`、`HoldUntil` | `Position`（`Vector2?`。`PressAt`、`HoverAt`、位置を渡した `MoveTo` のもの）、`PositionFunc`（もう一方の `MoveTo` の `Func<Vector2>`）、`Button`（`Press` と `Release` のもの。`null` は主なボタン）、`Delta`（`Scroll` のもの）、`Path` と `Value` と `ValueType`（`Set` のもの）、`Seconds`（`Move`、`Set`、`Hold` のもの。`HoldUntil` ではタイムアウト）、`Condition`（`HoldUntil` のもの） |
+| `ControlSequence.Step` | `Press`、`Release`、`Set`、`Text`、`Composition`、`Hold`、`HoldUntil` | `Control`（`Press`、`Release`、`Set` のもの。パスの `string`。押しと離しでは `Key` か `GamepadButton` のこともある）、`Value` と `ValueType`（`Set` のもの）、`Text`（`Text` と `Composition` のもの）、`Seconds`（`Set` と `Hold` のもの。`HoldUntil` ではタイムアウト）、`Condition`（`HoldUntil` のもの） |
 
 `Simulate` が返した item は、ちょうど 1 回終わります。
 
@@ -358,7 +365,7 @@ _item = Simulate<Gamepad>(sequence);
 
 `DragTarget` は、pointer がドラッグされたときに `beginDrag`、`drag`、`endDrag` を受け取るオブジェクトです。input module はそれを pointer が押されたときに決める（そのとき、そのオブジェクトは `initializePotentialDrag` を受け取る）ので、`DragTarget` は押しが処理された時点で値を持ち、`Simulate` が返るときにも 1 度求められています。何かがドラッグされたとは限りません。ドラッグのハンドラーを持つボタンをタップしても、そのボタンが `DragTarget` になります。pointer がドラッグしたかどうかは `Dragged` で、pointer がドラッグのしきい値より先へ動くと `true` になります。`DragStartedOrder` はそうした変化です。`DropTarget` は逆で、ドラッグしなかった pointer には drop が届かないので、`Dragged` が `true` でない限り `null` のままです。
 
-`LogItem.ToString` は、操作の種類、スロット、フレーム、操作の長さ、日時、押した位置、終わりの位置、押しを受け取るオブジェクトを出します。`null` のものは出しません。`Duration` がない item には `Duration:` がなく、終わりの位置がない item には `→` がありません。`GameObject: (none)` は、`Target` がないという意味です。ステップは出しません。デバイスでは、2 行目が `Device:` とその名前になります。
+`LogItem.ToString` は、操作の種類、スロット、フレーム、操作の長さ（小数点以下 2 桁）、日時、押した位置、終わりの位置、押しを受け取るオブジェクトを出します。`null` のものは出しません。`Duration` がない item には `Duration:` がなく、終わりの位置がない item には `→` がありません。`GameObject: (none)` は、`Target` がないという意味です。ステップは出しません。デバイスでは、2 行目が `Device:` とその名前になります。
 
 ```
 Finger Index: 0 FrameCount: 123, Duration: 0.10, DateTime: 11/04/2026 12:00:00
@@ -378,10 +385,11 @@ foreach (var e in GetLatestLogs())
 }
 ```
 
-- 戻り値は、並びを持つ struct で、`List<T>.Enumerator` と同じ作りです。`foreach` で回しても割り当ては起きません。`Count` と添字もあります。LINQ が使えるように `IEnumerable<LogEvent>` も実装していますが、その経路では割り当てが起きます。
-- 並びが有効なのは、次の Dynamic の入力更新までです。並びが作り直されたあとで、それを回したり、添字で要素を読んだりすると、`InvalidOperationException` を投げます。要素をあとで使うときは、写しを取ってください（たとえば `ToArray()` で）。
+- 戻り値は `LogEventSequence` で、`IReadOnlyList<LogEvent>` を実装する readonly struct です。auto tap のログを直接参照するもので、写しではありません。`foreach`、`Count`、添字では、割り当てが起きません。LINQ や `IEnumerable<LogEvent>` を通すと、enumerator が boxing されて割り当てが起きます。`default` の値は空の並びです。
+- 並びが有効なのは、次の Dynamic の入力更新が始まるまでです。そのあとで、並びを回す、`Count` を読む、要素を読む、のどれをしても `InvalidOperationException` を投げます。新しい並びが空のときも同じです。並びの外の添字は `ArgumentOutOfRangeException` を投げます。要素をあとで使うときは、写しを取ってください（たとえば `ToArray()` で）。
 - 並びは、`Update(float)` の頭ではなく、Dynamic の入力更新の頭で作り直されます。フレーム N で Simulate した操作は、フレーム N + 1 の並びに入り、そのフレームの `OnPreUpdate`、`Update(int)`、`OnPostUpdate`、`Update(float)` のあとで読めます。
-- auto tap は、作られてから `Dispose` されるまで、開始しているかどうかにかかわらず、入力更新の通知を受け取ります。そのため、並びは常に最新の更新のものです。`Start` の前でも、`Stop` のあとでも、仮想入力が外されたあとでも、並びは作り直され、何も起きなければ空になります。一度も開始しなかった auto tap も、`Dispose` してください。
+- auto tap は、作られてから `Dispose` されるまで、開始しているかどうかにかかわらず、入力更新の通知を受け取ります。そのため、並びは常に最新の更新のものです。`Start` の前でも、`Stop` のあとでも、仮想入力が外されたあとでも、並びは作り直され、何も起きなければ空になります。`Dispose` は並びを空にし、それまでに返した並びを無効にします。一度も開始しなかった auto tap も、`Dispose` してください。
+- 2 つの入力更新の間に起きたことは、その前の入力更新の並びには入りません。たとえば、Input System がデバイスをリセットする（`InputSystem.ResetDevice` や、デバイスを無効にしたとき）と、そのデバイスを使う操作は、その時点で終わります。それらの `Completed` の要素は、次の入力更新の並びに入ります。並びの中では、要素の番号の順に入り、その更新が処理する変化より前になります。`LogItem` は、すぐに書き換わります。
 - 1 つの item に、1 回の入力更新で複数のことが起きたときは、複数の要素になります。
 - 要素は `Order` の順です。番号のない要素は、ほかの要素のあとに、item を Simulate した順に並びます。次のものの `Completed` です。
   - `Dropped` になった item。そのイベントを捨てた入力更新の並びに入る。
@@ -526,13 +534,13 @@ public class RandomTap : AutoTapBase
 
 - `Simulate<Touchscreen>(...)` と `Simulate("Touchscreen", ...)` は、実行時に `ArgumentException` を投げます。指は `Simulate(slot, gesture)` で押します。
 - `Scenario.TryTap` は残ります。`RectTransform` から押す点を求め、押しが `target` に届くかを判定します。押すときは `Simulate(index, Gesture.PressAt(point).Hold(duration))` を呼びます。
-- `GetLatestLogs()` は `IEnumerable<LogEvent>` ではなく、並びを持つ struct を返します。最新の Dynamic の入力更新で起きたことの並びである点と、`foreach` が前と同じように動く点は変わりませんが、`foreach` で割り当てが起きなくなりました。並びが有効なのは、次の Dynamic の入力更新までです。そのあとで並びを回したり、添字で要素を読んだりすると、`InvalidOperationException` を投げます。2.0.0 では、返るものは有効なままの写しでした。要素をあとで使うなら、今、要素の写しを取ってください（たとえば `ToArray()` で）。並びは、auto tap が作られてから `Dispose` されるまで、Dynamic の入力更新のたびに作り直され、何も起きなければ空になります。
+- `GetLatestLogs()` は `IEnumerable<LogEvent>` ではなく、`IReadOnlyList<LogEvent>` を実装する readonly struct の `AutoTapBase.LogEventSequence` を返します。最新の Dynamic の入力更新で起きたことの並びである点は変わらず、`foreach`、LINQ、`IEnumerable<LogEvent>` 型の変数も、そのままコンパイルできます。ただし、`foreach`、`Count`、添字では割り当てが起きなくなり、LINQ や `IEnumerable<LogEvent>` を通すと割り当てが起きます。並びが有効なのは、次の Dynamic の入力更新が始まるまでです。そのあとで並びを回す、`Count` を読む、要素を読む、のどれをしても `InvalidOperationException` を投げます。2.0.0 では、返るものは有効なままの写しでした。要素をあとで使うなら、今、要素の写しを取ってください（たとえば `ToArray()` で）。並びは、auto tap が作られてから `Dispose` されるまで、Dynamic の入力更新のたびに作り直され、何も起きなければ空になります。2 つの入力更新の間に起きたこと（デバイスのリセットなど）は、次の更新の並びに入ります。
 - `LogItem.ToString` は、操作の種類（`Finger`、`Pointer`、`Device`）から始まります。2.0.0 で `DragTo` を出していた `ScreenPoint` の後ろに、`EndScreenPoint` を出します。`Duration` も出します。`null` のものは出しません。
 
 **追加されたもの**
 
 - `LogItem.EndScreenPoint`（`Vector2?`）は、指や pointer を最後に置く位置です。`LogItem.Duration`（`float?`）は、操作にかかる時間を、`Update(float)` に渡した秒数で表します。どちらも、操作が終わるまでは手順の値、終わったあとは実際の値で（どちらかは `Completed` で分かります）、手順から決まらないうちは `null` です。消えたものとは別のものです。`DragTo` は、動かない操作では `null` でしたが、`EndScreenPoint` は動かない操作にも値があります。前の `Duration` は、`Fire` に渡した数でした。
-- `Gesture.Steps` と `ControlSequence.Steps` は、手順を読み取り専用のリストにしたものです。`LogItem.CurrentStep` は、いま実行しているステップの添字です。
+- `Gesture.Steps` と `ControlSequence.Steps` は、手順を読み取り専用のリストにしたものです（`Gesture.Step`、`ControlSequence.Step`）。`LogItem.CurrentStep` は、いま実行しているステップの添字です。
 
 代わりの書き方:
 
@@ -582,7 +590,7 @@ v2 には、v1 の自前の raycast がありません。Input System が必要�
 - `CreateLog(index, target, startPosition, endPosition, duration, out logItem)` は `NewLogItem(int index)` になりました。item を作るだけで、フィールドはあとから埋まります。item は操作ごとに新しく作られます。v1 はスロットごとに 1 つの item を使い回していました。
 
 **ログ**
-- `GetLatestLogs()` は、最新の入力更新で起きたことを、処理した順（`Started`、`DragStarted`、`Completed`）に、`LogEvent` の並びとして返します。v1 は、動いていたスロットの `LogItem` を返していました。その更新で何も起きなければ、並びは空です。並びは、`foreach` で割り当てが起きない struct で、次の Dynamic の入力更新まで有効です（[`GetLatestLogs()`](#getlatestlogs)を参照）。捨てられた item、`Stop` が終わらせた item、終わりで何も変わらなかった item の終わりは、番号なしで最後に来ます。`GetLatestCompletedLogs()` はなくなりました。
+- `GetLatestLogs()` は、最新の入力更新で起きたことを、処理した順（`Started`、`DragStarted`、`Completed`）に、`LogEvent` の並びとして返します。v1 は、動いていたスロットの `LogItem` を返していました。その更新で何も起きなければ、並びは空です。並びは `LogEventSequence` で、`foreach` で割り当てが起きない struct です。次の Dynamic の入力更新まで有効です（[`GetLatestLogs()`](#getlatestlogs)を参照）。捨てられた item、`Stop` が終わらせた item、終わりで何も変わらなかった item の終わりは、番号なしで最後に来ます。`GetLatestCompletedLogs()` はなくなりました。
 - `LogItem` のフィールドは変わりました。v1 の `DragTo` は今の `EndScreenPoint` に、`Duration` は `float?` になりました。どちらも、操作が終わるまでは手順の値、終わったあとは実際の値で、手順から決まらないうちは `null` です。`EndScreenPoint` は指や pointer を最後に置く位置なので、動かない操作にもあります。`DragTo` にはありませんでした。手順は `LogItem.Gesture` と `LogItem.Sequence` から読め、`LogItem.CurrentStep` は、いま実行しているステップです。`ClickExecuted` と `ClickTarget` は予測です。
 - `LogItem.ToString` は v1 のものに近くなりました。v1 が `Tap` か `Drag` で始まっていたところは、操作の種類（`Finger`、`Pointer`、`Device`）で始まります。`null` のものは出しません。
 - pointer id は Input System のものです。指では `(deviceId << 24) + touchId`、マウスとペンではデバイスの id です。
