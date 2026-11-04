@@ -64,6 +64,8 @@ namespace UnityAutoTap
 		readonly Gesture _gesture;
 		readonly int _stepCount;
 		readonly IGestureTarget _target;
+		readonly PlanClock _clock = new PlanClock();
+		readonly int _lastMoveIndex;
 
 		int _index = 1;
 		float _elapsed;
@@ -72,13 +74,69 @@ namespace UnityAutoTap
 		Vector2 _to;
 		object _fromValue;
 		object _toValue;
+		Vector2? _plannedEnd;
 
 		public GestureRunner(Gesture gesture, int stepCount, IGestureTarget target)
 		{
 			_gesture = gesture;
 			_stepCount = stepCount;
 			_target = target;
+
+			// The first step is carried out by the caller, and it is where the pointer is put first.
+			for (var i = 0; i < stepCount; ++i)
+			{
+				var step = gesture.Steps[i];
+				switch (step.Kind)
+				{
+					case Gesture.StepKind.Press:
+					case Gesture.StepKind.Hover:
+						if (step.Position.HasValue)
+						{
+							_lastMoveIndex = i;
+						}
+
+						break;
+					case Gesture.StepKind.Move:
+						_lastMoveIndex = i;
+						_clock.AddSeconds(step.Seconds);
+						break;
+					case Gesture.StepKind.Set:
+					case Gesture.StepKind.Hold:
+						_clock.AddSeconds(step.Seconds);
+						break;
+					case Gesture.StepKind.HoldUntil:
+						_clock.AddHoldUntil();
+						break;
+				}
+			}
+
+			_plannedEnd = gesture.Steps[_lastMoveIndex].Position;
 		}
+
+		/// <summary>
+		/// The index of the step that the gesture is at, in <see cref="Gesture.Steps"/>: the first step, which the
+		/// caller carries out, until <see cref="Advance"/> or <see cref="AdvanceAfterFirstStep"/> reaches the next one;
+		/// the step that is being carried out; when the gesture is done, the step it was at, or the last step if
+		/// every step was carried out.
+		/// </summary>
+		public int CurrentStep { get; private set; }
+
+		/// <summary>
+		/// The sum of the times that <see cref="Advance"/> was given, in seconds.
+		/// </summary>
+		public float Elapsed => _clock.Elapsed;
+
+		/// <summary>
+		/// The time that the plan takes, in seconds, or <c>null</c> while it is not known: the plan has a
+		/// <c>HoldUntil</c> step that has not met its condition yet. See <see cref="PlanClock.Planned"/>.
+		/// </summary>
+		public float? PlannedDuration => _clock.Planned;
+
+		/// <summary>
+		/// Where the pointer is put last according to the plan, or <c>null</c> while it is not known: the last move
+		/// takes its destination from a function, and the move has not started yet.
+		/// </summary>
+		public Vector2? PlannedEndPoint => _plannedEnd;
 
 		/// <summary>
 		/// <c>true</c> once every step was carried out, or a <c>HoldUntil</c> timed out.
@@ -128,6 +186,7 @@ namespace UnityAutoTap
 		/// <param name="deltaTime">The time since the previous call, in seconds.</param>
 		public void Advance(float deltaTime)
 		{
+			_clock.Advance(deltaTime);
 			Run(deltaTime, false);
 		}
 
@@ -139,10 +198,12 @@ namespace UnityAutoTap
 			{
 				if (_index >= _stepCount)
 				{
+					CurrentStep = _gesture.Steps.Count - 1;
 					Done = true;
 					return;
 				}
 
+				CurrentStep = _index;
 				var step = _gesture.Steps[_index];
 				switch (step.Kind)
 				{
@@ -157,6 +218,11 @@ namespace UnityAutoTap
 
 							_from = _target.Position;
 							_to = step.PositionFunc != null ? step.PositionFunc() : step.Position.Value;
+							if (_index == _lastMoveIndex)
+							{
+								_plannedEnd = _to;
+							}
+
 							_elapsed = 0;
 							_started = true;
 						}
@@ -247,6 +313,7 @@ namespace UnityAutoTap
 
 						if (step.Condition())
 						{
+							_clock.ResolveHoldUntil(_elapsed);
 							Next();
 							break;
 						}
@@ -294,6 +361,68 @@ namespace UnityAutoTap
 			++_index;
 			_started = false;
 			_elapsed = 0;
+		}
+	}
+
+	/// <summary>
+	/// The time that a plan takes: what the plan says before it runs, and what was passed to it while it ran.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// The time is counted in the seconds that <see cref="AutoTapBase.Update(float)"/> passes. A step that takes a given
+	/// time (a move, a change of a value, a hold) adds it. A <c>HoldUntil</c> step takes as long as it waits, so it is
+	/// not known before that: it adds nothing until it met its condition, and what it waited is added then.
+	/// </para>
+	/// </remarks>
+	internal sealed class PlanClock
+	{
+		float _planned;
+		int _unresolved;
+		float _resolved;
+
+		/// <summary>
+		/// The sum of the times that <see cref="Advance"/> was given, in seconds.
+		/// </summary>
+		public float Elapsed { get; private set; }
+
+		/// <summary>
+		/// The time that the plan takes, in seconds: the times of the steps that take a given time, and the times that
+		/// the <c>HoldUntil</c> steps that met their condition waited. <c>null</c> while a <c>HoldUntil</c> step has not
+		/// met its condition.
+		/// </summary>
+		public float? Planned => _unresolved > 0 ? (float?)null : _planned + _resolved;
+
+		/// <summary>
+		/// Adds the time of a step that takes a given time.
+		/// </summary>
+		public void AddSeconds(float seconds)
+		{
+			_planned += seconds;
+		}
+
+		/// <summary>
+		/// Adds a <c>HoldUntil</c> step, whose time is not known yet.
+		/// </summary>
+		public void AddHoldUntil()
+		{
+			++_unresolved;
+		}
+
+		/// <summary>
+		/// Tells that a <c>HoldUntil</c> step met its condition after waiting <paramref name="seconds"/>.
+		/// </summary>
+		public void ResolveHoldUntil(float seconds)
+		{
+			--_unresolved;
+			_resolved += seconds;
+		}
+
+		/// <summary>
+		/// Counts the time that the plan was given for one frame.
+		/// </summary>
+		public void Advance(float deltaTime)
+		{
+			Elapsed += Mathf.Max(0f, deltaTime);
 		}
 	}
 

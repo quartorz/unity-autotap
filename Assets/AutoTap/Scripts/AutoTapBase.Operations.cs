@@ -69,6 +69,38 @@ namespace UnityAutoTap
 			public abstract PointerPrediction Prediction { get; }
 
 			/// <summary>
+			/// <c>true</c> once <see cref="Update(float)"/> carries out the plan: the steps after the ones that
+			/// <c>Simulate</c> queued are carried out only then.
+			/// </summary>
+			public abstract bool PlanRuns { get; }
+
+			/// <summary>
+			/// The index of the step that the plan is at. See <see cref="LogItem.CurrentStep"/>.
+			/// </summary>
+			public abstract int CurrentStep { get; }
+
+			/// <summary>
+			/// The sum of the times that <see cref="Update(float)"/> passed to the plan, in seconds.
+			/// </summary>
+			public abstract float Elapsed { get; }
+
+			/// <summary>
+			/// The time that the plan takes, in seconds, or <c>null</c> while it is not known.
+			/// </summary>
+			public abstract float? PlannedDuration { get; }
+
+			/// <summary>
+			/// Where the plan puts the pointer last, or <c>null</c> while that is not known, and for an operation that
+			/// has no position.
+			/// </summary>
+			public abstract Vector2? PlannedEndPoint { get; }
+
+			/// <summary>
+			/// Where the pointer was put last, or <c>null</c> for an operation that has no position.
+			/// </summary>
+			public abstract Vector2? LastPosition { get; }
+
+			/// <summary>
 			/// Queues what ends the operation, if that was not queued yet.
 			/// </summary>
 			public abstract void Interrupt();
@@ -99,6 +131,13 @@ namespace UnityAutoTap
 			public GestureRunner Runner { get; }
 
 			public override PointerPrediction Prediction => Finger.Prediction;
+
+			public override bool PlanRuns => Started;
+			public override int CurrentStep => Runner.CurrentStep;
+			public override float Elapsed => Runner.Elapsed;
+			public override float? PlannedDuration => Runner.PlannedDuration;
+			public override Vector2? PlannedEndPoint => Runner.PlannedEndPoint;
+			public override Vector2? LastPosition => Finger.Position;
 
 			public Vector2 Position => Finger.Position;
 
@@ -191,6 +230,8 @@ namespace UnityAutoTap
 			/// </summary>
 			public bool CanAdvance => !HasQueued || EventsProcessed;
 
+			public override bool PlanRuns => Started || CanAdvance;
+
 			public abstract bool RunnerDone { get; }
 			public abstract EndReason RunnerReason { get; }
 			public abstract bool PressedInLastAdvance { get; }
@@ -258,6 +299,12 @@ namespace UnityAutoTap
 			public ButtonTrack Track { get; private set; }
 
 			public override PointerPrediction Prediction => Track?.Predictor.Prediction;
+
+			public override int CurrentStep => Runner.CurrentStep;
+			public override float Elapsed => Runner.Elapsed;
+			public override float? PlannedDuration => Runner.PlannedDuration;
+			public override Vector2? PlannedEndPoint => Runner.PlannedEndPoint;
+			public override Vector2? LastPosition => Pointer.Position;
 
 			public override bool RunnerDone => Runner.Done;
 			public override EndReason RunnerReason => Runner.Reason;
@@ -394,6 +441,12 @@ namespace UnityAutoTap
 
 			public override PointerPrediction Prediction => null;
 
+			public override int CurrentStep => Runner.CurrentStep;
+			public override float Elapsed => Runner.Elapsed;
+			public override float? PlannedDuration => Runner.PlannedDuration;
+			public override Vector2? PlannedEndPoint => null;
+			public override Vector2? LastPosition => null;
+
 			public override bool RunnerDone => Runner.Done;
 			public override EndReason RunnerReason => Runner.Reason;
 			public override bool PressedInLastAdvance => Runner.PressedInLastAdvance;
@@ -501,6 +554,7 @@ namespace UnityAutoTap
 					{
 						operation.Item.Order = began.Order;
 						operation.Item.StartedFrameCount = began.Frame;
+						RefreshItem(operation);
 						AppendLog(operation.Item, LogEventKind.Started, began.Order);
 					}
 
@@ -553,6 +607,7 @@ namespace UnityAutoTap
 						{
 							bound.Item.Order = change.Order;
 							bound.Item.StartedFrameCount = change.Frame;
+							RefreshItem(bound);
 							AppendLog(bound.Item, LogEventKind.Started, change.Order);
 						}
 
@@ -667,6 +722,11 @@ namespace UnityAutoTap
 				{
 					bound.UpdateLastOrder = null;
 				}
+
+				if (!operation.Ended)
+				{
+					RefreshItem(operation);
+				}
 			}
 
 			if (anyEnded)
@@ -738,6 +798,18 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
+		/// Writes what is known of an operation that has not ended into its <see cref="LogItem"/>: the step it is at,
+		/// where the plan puts the pointer last, and the time the plan takes.
+		/// </summary>
+		void RefreshItem(Operation operation)
+		{
+			var item = operation.Item;
+			item.CurrentStep = operation.PlanRuns ? operation.CurrentStep : -1;
+			item.EndScreenPoint = operation.PlannedEndPoint;
+			item.Duration = operation.PlannedDuration;
+		}
+
+		/// <summary>
 		/// Ends an operation: fills in the end of its <see cref="LogItem"/>.
 		/// </summary>
 		void Complete(Operation operation, EndReason reason, long? order, int frame)
@@ -748,6 +820,9 @@ namespace UnityAutoTap
 			item.EndReason = reason;
 			item.CompletedOrder = order;
 			item.CompletedFrameCount = frame;
+			item.EndScreenPoint = operation.LastPosition;
+			item.Duration = operation.Elapsed;
+			item.CurrentStep = reason == EndReason.Finished || operation.PlanRuns ? operation.CurrentStep : -1;
 			if (operation is FingerOperation fingerOperation)
 			{
 				_fingerOperations.Remove(fingerOperation.Finger.TouchId);
@@ -823,6 +898,7 @@ namespace UnityAutoTap
 			}
 
 			operation.Runner.Advance(deltaTime);
+			RefreshItem(operation);
 			ShowMarker(operation.Index, operation.Finger.Position);
 			if (operation.Runner.Done)
 			{
@@ -854,6 +930,7 @@ namespace UnityAutoTap
 				}
 
 				bound.AdvanceRunner(deltaTime);
+				RefreshItem(bound);
 				if (bound is PointerOperation pointerOperation)
 				{
 					ShowPointerMarker(pointerOperation.Pointer, pointerOperation.Position);

@@ -165,7 +165,7 @@ namespace UnityAutoTap.Tests
 
 			Assert.That(item.ToString(), Does.StartWith("Finger Index: 1 FrameCount: "));
 			Assert.That(item.ToString(), Does.EndWith("GameObject: (none)"));
-			Assert.That(item.ToString(), Does.Not.Contain("Duration"));
+			Assert.That(item.ToString(), Does.Contain(", Duration: 0.00, DateTime: "), "the plan of a tap without a hold takes no time");
 			Assert.That(device.ToString(), Does.StartWith("Device Index: -1 FrameCount: "));
 			Assert.That(device.ToString(), Does.Contain("Device: AutoTap-Keyboard-0"));
 		}

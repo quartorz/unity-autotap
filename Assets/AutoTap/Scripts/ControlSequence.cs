@@ -156,7 +156,8 @@ namespace UnityAutoTap
 		/// </summary>
 		/// <remarks>
 		/// <para>
-		/// It is a read-only view of the sequence: steps that are added to the sequence later show up in it.
+		/// It is a read-only view of the sequence: steps that are added to the sequence later show up in it. The index
+		/// of a step is what <see cref="AutoTapBase.LogItem.CurrentStep"/> refers to.
 		/// </para>
 		/// </remarks>
 		public IReadOnlyList<Step> Steps => _readOnlySteps;

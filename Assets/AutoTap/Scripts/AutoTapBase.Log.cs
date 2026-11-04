@@ -2,6 +2,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -294,6 +295,14 @@ namespace UnityAutoTap
 		/// </summary>
 		/// <remarks>
 		/// <para>
+		/// An item is one object for the whole operation: the <see cref="LogEvent"/>s of its start, of the start of its
+		/// drag and of its end refer to the same item, and what is written in it changes in place. A field that tells
+		/// what is known so far (<see cref="Target"/>, <see cref="DragTarget"/>, <see cref="ClickTarget"/>,
+		/// <see cref="EndScreenPoint"/>, <see cref="Duration"/>, <see cref="CurrentStep"/> and the fields that say whether
+		/// something happened) has the value of the time it is read. To know what it was at the time of an event, read it
+		/// in the frame of that event, or copy it.
+		/// </para>
+		/// <para>
 		/// Fields about the targets (<see cref="Target"/>, <see cref="ClickTarget"/>, <see cref="ClickExecuted"/>,
 		/// <see cref="Dragged"/>, <see cref="DragTarget"/>, <see cref="DropTarget"/>) are predictions of what the
 		/// input module delivers (see <see cref="PointerPrediction"/>). They are set only for fingers and pointers;
@@ -329,7 +338,8 @@ namespace UnityAutoTap
 			public DateTime DateTime;
 
 			/// <summary>
-			/// The object that receives the pointer-down, predicted for the first press. <c>null</c> if there is
+			/// The object that receives the pointer-down, as far as it is known: predicted for the first press when
+			/// <c>Simulate</c> is called, and worked out again when the press is processed. <c>null</c> if there is
 			/// none.
 			/// </summary>
 			public GameObject Target;
@@ -338,6 +348,69 @@ namespace UnityAutoTap
 			/// The position of the first press or hover, in screen pixels. Zero for <see cref="LogItemKind.Device"/>.
 			/// </summary>
 			public Vector2 ScreenPoint;
+
+			/// <summary>
+			/// The position where the finger or the pointer is put last, in screen pixels, as far as it is known.
+			/// </summary>
+			/// <remarks>
+			/// <para>
+			/// Until the operation ended (<see cref="Completed"/> is <c>false</c>), the position that the plan gives:
+			/// the position of the last step that moves the pointer, which is <see cref="ScreenPoint"/> for a plan that
+			/// moves it nowhere. It is <c>null</c> while the plan does not give it: the last move takes its destination
+			/// from a function (<see cref="Gesture.MoveTo(Func{Vector2}, float)"/>), which is called when that move
+			/// starts, so the position is known from then on.
+			/// </para>
+			/// <para>
+			/// Once the operation ended, the position where it actually put the pointer last, which differs from the
+			/// plan if the operation did not carry the plan out (see <see cref="EndReason"/>).
+			/// </para>
+			/// <para>
+			/// Always <c>null</c> for <see cref="LogItemKind.Device"/>, which has no position.
+			/// </para>
+			/// </remarks>
+			public Vector2? EndScreenPoint;
+
+			/// <summary>
+			/// How long the operation lasts, in seconds, as far as it is known. Time is counted in the
+			/// <c>deltaTime</c> that is passed to <see cref="Update(float)"/>.
+			/// </summary>
+			/// <remarks>
+			/// <para>
+			/// Until the operation ended (<see cref="Completed"/> is <c>false</c>), the time that the plan takes: the sum
+			/// of the seconds of its steps (<see cref="Gesture.Step.Seconds"/>, <see cref="ControlSequence.Step.Seconds"/>
+			/// of the steps that take a given time). A <c>HoldUntil</c> step takes as long as it waits, so the time is
+			/// <c>null</c> until every <c>HoldUntil</c> step of the plan met its condition, and it is the time that it
+			/// waited that is added then. If a <c>HoldUntil</c> step times out, it never met its condition, and the time
+			/// stays <c>null</c> until the operation ended.
+			/// </para>
+			/// <para>
+			/// Once the operation ended, the sum of the <c>deltaTime</c> values that <see cref="Update(float)"/> passed to
+			/// the plan of the operation. If the operation carried the plan out, this is at least the time of the plan,
+			/// and exceeds it by less than one <c>deltaTime</c>, because a frame is not divided. It is zero for an
+			/// operation that never ran, such as one that was dropped.
+			/// </para>
+			/// </remarks>
+			public float? Duration;
+
+			/// <summary>
+			/// The index of the step that the operation is carrying out, in <see cref="Gesture.Steps"/> of
+			/// <see cref="Gesture"/> or in <see cref="ControlSequence.Steps"/> of <see cref="Sequence"/>. It changes as the
+			/// operation proceeds.
+			/// </summary>
+			/// <remarks>
+			/// <para>
+			/// <c>-1</c> until the operation is under way, and for an operation that ended without having been. A finger
+			/// is under way once the Input System processed its press (<see cref="Order"/> is set). A pointer or a
+			/// device is under way once the Input System processed what the steps that <c>Simulate</c> queued wrote, or
+			/// at once if they wrote nothing.
+			/// </para>
+			/// <para>
+			/// When the operation ended (<see cref="Completed"/> is <c>true</c>), it is the index of the last step if the
+			/// plan was carried out to its end (<see cref="EndReason.Finished"/>), and otherwise the index of the step the
+			/// operation was at when it ended, which is <c>-1</c> for <see cref="EndReason.Dropped"/>.
+			/// </para>
+			/// </remarks>
+			public int CurrentStep;
 
 			/// <summary>
 			/// <see cref="Time.frameCount"/> when <c>Simulate</c> was called.
@@ -383,7 +456,8 @@ namespace UnityAutoTap
 			/// It is a prospect, not a record of a drag: the input module decides it when the pointer is pressed (it
 			/// is the object that receives <c>initializePotentialDrag</c> then), so it is worked out for the press
 			/// when <c>Simulate</c> is called, again when the press is processed, and it stays for an operation that did
-			/// not drag. <see cref="Dragged"/> tells whether the pointer was dragged.
+			/// not drag. <see cref="Dragged"/> tells whether the pointer was dragged. Like <see cref="Target"/>, it is
+			/// what is known when it is read.
 			/// </para>
 			/// </remarks>
 			public GameObject DragTarget;
@@ -433,32 +507,51 @@ namespace UnityAutoTap
 			public bool ClickExecuted;
 
 			/// <summary>
-			/// The object that receives the click, if <see cref="ClickExecuted"/> is <c>true</c>.
+			/// The object that receives the click, if <see cref="ClickExecuted"/> is <c>true</c>. It is set when the
+			/// release is processed, and is <c>null</c> until then.
 			/// </summary>
 			public GameObject ClickTarget;
 
 			/// <summary>
 			/// The plan of the operation, for <see cref="LogItemKind.Finger"/> and <see cref="LogItemKind.Pointer"/>.
-			/// What a tap, a drag and a hold last is in its steps. <c>null</c> otherwise.
+			/// What a tap, a drag and a hold last is in its <see cref="Gesture.Steps"/>. <c>null</c> otherwise.
 			/// </summary>
 			public Gesture Gesture;
 
 			/// <summary>
-			/// The plan of the operation, for <see cref="LogItemKind.Device"/>. <c>null</c> otherwise.
+			/// The plan of the operation, for <see cref="LogItemKind.Device"/>, whose <see cref="ControlSequence.Steps"/> can
+			/// be read. <c>null</c> otherwise.
 			/// </summary>
 			public ControlSequence Sequence;
 
-			/// <inheritdoc/>
+			/// <summary>
+			/// Describes the item in two lines: the kind, the slot, the frame, <see cref="Duration"/> and the date of
+			/// <c>Simulate</c>; then, for a finger or a pointer, <see cref="ScreenPoint"/> followed by
+			/// <see cref="EndScreenPoint"/> and the object that receives the press (<c>(none)</c> if there is none), or,
+			/// for a device, its name. <see cref="Duration"/> and <see cref="EndScreenPoint"/> are left out while they are
+			/// <c>null</c>. The steps are not written.
+			/// </summary>
 			public override string ToString()
 			{
-				var head = $"{Kind} Index: {Index} FrameCount: {FrameCount}, DateTime: {DateTime}";
+				var head = $"{Kind} Index: {Index} FrameCount: {FrameCount}";
+				if (Duration.HasValue)
+				{
+					head += $", Duration: {Duration.Value.ToString("F2", CultureInfo.InvariantCulture)}";
+				}
+
+				head += $", DateTime: {DateTime}";
 				if (Kind == LogItemKind.Device)
 				{
 					return $"{head}\nDevice: {(Device != null ? Device.name : "(none)")}";
 				}
 
-				return
-					$"{head}\nScreenPoint: {ScreenPoint} GameObject: {(Target != null ? Target.name : "(none)")}";
+				var point = ScreenPoint.ToString();
+				if (EndScreenPoint.HasValue)
+				{
+					point += $" → {EndScreenPoint.Value}";
+				}
+
+				return $"{head}\nScreenPoint: {point} GameObject: {(Target != null ? Target.name : "(none)")}";
 			}
 		}
 	}

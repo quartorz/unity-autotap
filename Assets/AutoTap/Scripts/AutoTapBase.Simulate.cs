@@ -255,6 +255,7 @@ namespace UnityAutoTap
 			_operations.Add(operation);
 			_deviceOperations.Add(pointer.Device, operation);
 			operation.QueueInitialSteps(plan);
+			RefreshItem(operation);
 			ShowPointerMarker(pointer, operation.Position);
 			return item;
 		}
@@ -408,6 +409,7 @@ namespace UnityAutoTap
 			_operations.Add(operation);
 			_deviceOperations.Add(device.Device, operation);
 			operation.QueueInitialSteps();
+			RefreshItem(operation);
 			return item;
 		}
 
@@ -430,6 +432,9 @@ namespace UnityAutoTap
 			item.DateTime = DateTime.Now;
 			item.Target = target;
 			item.ScreenPoint = start;
+			item.EndScreenPoint = null;
+			item.Duration = null;
+			item.CurrentStep = -1;
 			item.FrameCount = Time.frameCount;
 			item.Order = null;
 			item.StartedFrameCount = 0;
@@ -501,6 +506,7 @@ namespace UnityAutoTap
 			_operations.Add(operation);
 			_fingerOperations.Add(finger.TouchId, operation);
 			operation.Runner.AdvanceAfterFirstStep(true);
+			RefreshItem(operation);
 			ShowMarker(index, finger.Position);
 			return item;
 		}

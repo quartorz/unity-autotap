@@ -58,6 +58,7 @@ namespace UnityAutoTap
 	{
 		readonly ControlSequence _sequence;
 		readonly ISequenceTarget _target;
+		readonly PlanClock _clock = new PlanClock();
 
 		int _index;
 		float _elapsed;
@@ -69,7 +70,39 @@ namespace UnityAutoTap
 		{
 			_sequence = sequence;
 			_target = target;
+			for (var i = 0; i < sequence.Steps.Count; ++i)
+			{
+				var step = sequence.Steps[i];
+				switch (step.Kind)
+				{
+					case ControlSequence.StepKind.Set:
+					case ControlSequence.StepKind.Hold:
+						_clock.AddSeconds(step.Seconds);
+						break;
+					case ControlSequence.StepKind.HoldUntil:
+						_clock.AddHoldUntil();
+						break;
+				}
+			}
 		}
+
+		/// <summary>
+		/// The index of the step that the sequence is at, in <see cref="ControlSequence.Steps"/>: the step that is
+		/// being carried out; when the sequence is done, the step it was at, or the last step if every step was carried
+		/// out.
+		/// </summary>
+		public int CurrentStep { get; private set; }
+
+		/// <summary>
+		/// The sum of the times that <see cref="Advance"/> was given, in seconds.
+		/// </summary>
+		public float Elapsed => _clock.Elapsed;
+
+		/// <summary>
+		/// The time that the plan takes, in seconds, or <c>null</c> while it is not known: the plan has a
+		/// <c>HoldUntil</c> step that has not met its condition yet. See <see cref="PlanClock.Planned"/>.
+		/// </summary>
+		public float? PlannedDuration => _clock.Planned;
 
 		/// <summary>
 		/// <c>true</c> once every step was carried out, or a <c>HoldUntil</c> timed out.
@@ -94,15 +127,18 @@ namespace UnityAutoTap
 		public void Advance(float deltaTime)
 		{
 			PressedInLastAdvance = false;
+			_clock.Advance(deltaTime);
 			var remaining = Mathf.Max(0f, deltaTime);
 			while (!Done)
 			{
 				if (_index >= _sequence.Steps.Count)
 				{
+					CurrentStep = _sequence.Steps.Count - 1;
 					Done = true;
 					return;
 				}
 
+				CurrentStep = _index;
 				var step = _sequence.Steps[_index];
 				switch (step.Kind)
 				{
@@ -174,6 +210,7 @@ namespace UnityAutoTap
 
 						if (step.Condition())
 						{
+							_clock.ResolveHoldUntil(_elapsed);
 							Next();
 							break;
 						}
