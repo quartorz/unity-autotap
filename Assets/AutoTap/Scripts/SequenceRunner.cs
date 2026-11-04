@@ -20,14 +20,14 @@ namespace UnityAutoTap
 		void SetControl(string path, object value);
 
 		/// <summary>
-		/// Queues one event that presses the control of a press step.
+		/// Queues one event that presses the control of the press step at an index.
 		/// </summary>
-		void Press(ControlSequence.Step step);
+		void Press(int stepIndex);
 
 		/// <summary>
-		/// Queues one event that releases the control of a release step.
+		/// Queues one event that releases the control of the release step at an index.
 		/// </summary>
-		void Release(ControlSequence.Step step);
+		void Release(int stepIndex);
 
 		/// <summary>
 		/// Queues the text events of a text step.
@@ -188,7 +188,7 @@ namespace UnityAutoTap
 						return;
 					}
 					case ControlSequence.StepKind.Press:
-						_target.Press(step);
+						_target.Press(_index);
 						PressedInLastAdvance = true;
 						Next();
 						break;
@@ -198,7 +198,7 @@ namespace UnityAutoTap
 							return;
 						}
 
-						_target.Release(step);
+						_target.Release(_index);
 						Next();
 						break;
 					case ControlSequence.StepKind.Text:

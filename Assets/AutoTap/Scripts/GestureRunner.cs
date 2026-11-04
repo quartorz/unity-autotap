@@ -156,7 +156,7 @@ namespace UnityAutoTap
 							}
 
 							_from = _target.Position;
-							_to = step.PositionFunc != null ? step.PositionFunc() : step.Position;
+							_to = step.PositionFunc != null ? step.PositionFunc() : step.Position.Value;
 							_elapsed = 0;
 							_started = true;
 						}

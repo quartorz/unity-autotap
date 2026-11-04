@@ -379,11 +379,11 @@ namespace UnityAutoTap
 		sealed class DeviceOperation : DeviceBoundOperation, ISequenceTarget
 		{
 			readonly List<ButtonControl> _pressed = new List<ButtonControl>();
-			readonly Dictionary<ControlSequence.Step, ButtonControl> _buttons;
+			readonly ButtonControl[] _buttons;
 
 			public DeviceOperation(
 				LogItem item, long startSequence, VirtualDevice device, ControlSequence sequence,
-				Dictionary<ControlSequence.Step, ButtonControl> buttons)
+				ButtonControl[] buttons)
 				: base(item, startSequence, device)
 			{
 				_buttons = buttons;
@@ -422,9 +422,9 @@ namespace UnityAutoTap
 				NoteQueued();
 			}
 
-			public void Press(ControlSequence.Step step)
+			public void Press(int stepIndex)
 			{
-				var button = _buttons[step];
+				var button = _buttons[stepIndex];
 				Device.QueueEvent(new InputControl[] { button }, new object[] { 1f }, reset: false);
 				NoteQueued();
 				if (!_pressed.Contains(button))
@@ -433,9 +433,9 @@ namespace UnityAutoTap
 				}
 			}
 
-			public void Release(ControlSequence.Step step)
+			public void Release(int stepIndex)
 			{
-				var button = _buttons[step];
+				var button = _buttons[stepIndex];
 				Device.QueueEvent(new InputControl[] { button }, new object[] { 0f }, reset: false);
 				NoteQueued();
 				_pressed.Remove(button);

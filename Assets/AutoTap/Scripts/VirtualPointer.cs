@@ -227,8 +227,9 @@ namespace UnityAutoTap
 		/// <exception cref="ArgumentException">A control of the gesture does not exist or does not fit the step.</exception>
 		internal void ValidateGesture(Gesture gesture)
 		{
-			foreach (var step in gesture.Steps)
+			for (var i = 0; i < gesture.Steps.Count; ++i)
 			{
+				var step = gesture.Steps[i];
 				switch (step.Kind)
 				{
 					case Gesture.StepKind.Press:

@@ -37,33 +37,129 @@ namespace UnityAutoTap
 	/// </remarks>
 	public sealed class ControlSequence
 	{
-		internal enum StepKind
+		/// <summary>
+		/// What a <see cref="Step"/> of a sequence does.
+		/// </summary>
+		public enum StepKind
 		{
+			/// <summary>
+			/// Presses a button-like control: writes 1 to it (<see cref="ControlSequence.Press(string)"/>,
+			/// <see cref="ControlSequence.Press(Key)"/>, <see cref="ControlSequence.Press(GamepadButton)"/>).
+			/// </summary>
 			Press,
+
+			/// <summary>
+			/// Releases a button-like control: writes 0 to it (<see cref="ControlSequence.Release(string)"/>,
+			/// <see cref="ControlSequence.Release(Key)"/>, <see cref="ControlSequence.Release(GamepadButton)"/>).
+			/// </summary>
 			Release,
+
+			/// <summary>
+			/// Changes a control gradually (<see cref="ControlSequence.Set{T}"/>).
+			/// </summary>
 			Set,
+
+			/// <summary>
+			/// Enters text (<see cref="ControlSequence.Text"/>).
+			/// </summary>
 			Text,
+
+			/// <summary>
+			/// Sets the text being composed by an input method editor (<see cref="ControlSequence.Composition"/>).
+			/// </summary>
 			Composition,
+
+			/// <summary>
+			/// Keeps everything as it is for a time (<see cref="ControlSequence.Hold"/>).
+			/// </summary>
 			Hold,
+
+			/// <summary>
+			/// Keeps everything as it is until a condition is met (<see cref="ControlSequence.HoldUntil"/>).
+			/// </summary>
 			HoldUntil,
 		}
 
-		internal sealed class Step
+		/// <summary>
+		/// One step of the plan of a <see cref="ControlSequence"/>, as it was given. Which values a step has depends on
+		/// its <see cref="Kind"/>; the others are <c>null</c>, zero or empty.
+		/// </summary>
+		public readonly struct Step
 		{
-			public StepKind Kind;
+			internal Step(
+				StepKind kind, object control = null, object value = null, Type valueType = null, string text = null,
+				float seconds = 0f, Func<bool> condition = null)
+			{
+				Kind = kind;
+				Control = control;
+				Value = value;
+				ValueType = valueType;
+				Text = text;
+				Seconds = seconds;
+				Condition = condition;
+			}
 
 			/// <summary>
-			/// A control path, a <see cref="Key"/> or a <see cref="GamepadButton"/>.
+			/// What the step does.
 			/// </summary>
-			public object Control;
-			public object Value;
-			public Type ValueType;
-			public string Text;
-			public float Seconds;
-			public Func<bool> Condition;
+			public StepKind Kind { get; }
+
+			/// <summary>
+			/// The control of a <see cref="StepKind.Press"/>, <see cref="StepKind.Release"/> or
+			/// <see cref="StepKind.Set"/>: a path relative to the device (a <see cref="string"/>), or, for a press or a
+			/// release, a <see cref="Key"/> or a <see cref="GamepadButton"/>. <c>null</c> for the other steps.
+			/// </summary>
+			public object Control { get; }
+
+			/// <summary>
+			/// The value that a <see cref="StepKind.Set"/> has at the end of the step, boxed as <see cref="ValueType"/>.
+			/// <c>null</c> for the other steps.
+			/// </summary>
+			public object Value { get; }
+
+			/// <summary>
+			/// The type argument of a <see cref="StepKind.Set"/>. <c>null</c> for the other steps.
+			/// </summary>
+			public Type ValueType { get; }
+
+			/// <summary>
+			/// The characters of a <see cref="StepKind.Text"/> or the text of a <see cref="StepKind.Composition"/>.
+			/// <c>null</c> for the other steps.
+			/// </summary>
+			public string Text { get; }
+
+			/// <summary>
+			/// The time that a <see cref="StepKind.Set"/> or a <see cref="StepKind.Hold"/> takes, in seconds, and the
+			/// timeout of a <see cref="StepKind.HoldUntil"/>. Zero for the other steps.
+			/// </summary>
+			public float Seconds { get; }
+
+			/// <summary>
+			/// The condition of a <see cref="StepKind.HoldUntil"/>. <c>null</c> for the other steps.
+			/// </summary>
+			public Func<bool> Condition { get; }
 		}
 
-		internal readonly List<Step> Steps = new List<Step>();
+		readonly List<Step> _steps = new List<Step>();
+		readonly IReadOnlyList<Step> _readOnlySteps;
+
+		/// <summary>
+		/// Creates an empty sequence.
+		/// </summary>
+		public ControlSequence()
+		{
+			_readOnlySteps = _steps.AsReadOnly();
+		}
+
+		/// <summary>
+		/// The plan, step by step, in the order the steps run.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// It is a read-only view of the sequence: steps that are added to the sequence later show up in it.
+		/// </para>
+		/// </remarks>
+		public IReadOnlyList<Step> Steps => _readOnlySteps;
 
 		/// <summary>
 		/// Checks that the sequence writes something, which a sequence of waiting steps only does not.
@@ -71,9 +167,9 @@ namespace UnityAutoTap
 		/// <exception cref="ArgumentException">The sequence has no step that writes.</exception>
 		internal void RequireWrites()
 		{
-			foreach (var step in Steps)
+			for (var i = 0; i < _steps.Count; ++i)
 			{
-				switch (step.Kind)
+				switch (_steps[i].Kind)
 				{
 					case StepKind.Press:
 					case StepKind.Release:
@@ -112,7 +208,7 @@ namespace UnityAutoTap
 		/// <param name="controlPath">The path of the control relative to the device.</param>
 		public ControlSequence Press(string controlPath)
 		{
-			Steps.Add(new Step { Kind = StepKind.Press, Control = RequirePath(controlPath) });
+			_steps.Add(new Step(StepKind.Press, control: RequirePath(controlPath)));
 			return this;
 		}
 
@@ -122,7 +218,7 @@ namespace UnityAutoTap
 		/// <param name="controlPath">The path of the control relative to the device.</param>
 		public ControlSequence Release(string controlPath)
 		{
-			Steps.Add(new Step { Kind = StepKind.Release, Control = RequirePath(controlPath) });
+			_steps.Add(new Step(StepKind.Release, control: RequirePath(controlPath)));
 			return this;
 		}
 
@@ -132,7 +228,7 @@ namespace UnityAutoTap
 		/// <param name="key">The key to press.</param>
 		public ControlSequence Press(Key key)
 		{
-			Steps.Add(new Step { Kind = StepKind.Press, Control = key });
+			_steps.Add(new Step(StepKind.Press, control: key));
 			return this;
 		}
 
@@ -142,7 +238,7 @@ namespace UnityAutoTap
 		/// <param name="key">The key to release.</param>
 		public ControlSequence Release(Key key)
 		{
-			Steps.Add(new Step { Kind = StepKind.Release, Control = key });
+			_steps.Add(new Step(StepKind.Release, control: key));
 			return this;
 		}
 
@@ -152,7 +248,7 @@ namespace UnityAutoTap
 		/// <param name="button">The button to press.</param>
 		public ControlSequence Press(GamepadButton button)
 		{
-			Steps.Add(new Step { Kind = StepKind.Press, Control = button });
+			_steps.Add(new Step(StepKind.Press, control: button));
 			return this;
 		}
 
@@ -162,7 +258,7 @@ namespace UnityAutoTap
 		/// <param name="button">The button to release.</param>
 		public ControlSequence Release(GamepadButton button)
 		{
-			Steps.Add(new Step { Kind = StepKind.Release, Control = button });
+			_steps.Add(new Step(StepKind.Release, control: button));
 			return this;
 		}
 
@@ -180,14 +276,8 @@ namespace UnityAutoTap
 		public ControlSequence Set<T>(string controlPath, T value, float seconds = 0) where T : struct
 		{
 			RequireSeconds(seconds);
-			Steps.Add(new Step
-			{
-				Kind = StepKind.Set,
-				Control = RequirePath(controlPath),
-				Value = value,
-				ValueType = typeof(T),
-				Seconds = seconds,
-			});
+			_steps.Add(new Step(
+				StepKind.Set, control: RequirePath(controlPath), value: value, valueType: typeof(T), seconds: seconds));
 			return this;
 		}
 
@@ -202,7 +292,7 @@ namespace UnityAutoTap
 				throw new ArgumentNullException(nameof(text));
 			}
 
-			Steps.Add(new Step { Kind = StepKind.Text, Text = text });
+			_steps.Add(new Step(StepKind.Text, text: text));
 			return this;
 		}
 
@@ -218,7 +308,7 @@ namespace UnityAutoTap
 				throw new ArgumentNullException(nameof(text));
 			}
 
-			Steps.Add(new Step { Kind = StepKind.Composition, Text = text });
+			_steps.Add(new Step(StepKind.Composition, text: text));
 			return this;
 		}
 
@@ -229,7 +319,7 @@ namespace UnityAutoTap
 		public ControlSequence Hold(float seconds)
 		{
 			RequireSeconds(seconds);
-			Steps.Add(new Step { Kind = StepKind.Hold, Seconds = seconds });
+			_steps.Add(new Step(StepKind.Hold, seconds: seconds));
 			return this;
 		}
 
@@ -248,7 +338,7 @@ namespace UnityAutoTap
 			}
 
 			RequireSeconds(timeoutSeconds);
-			Steps.Add(new Step { Kind = StepKind.HoldUntil, Condition = condition, Seconds = timeoutSeconds });
+			_steps.Add(new Step(StepKind.HoldUntil, seconds: timeoutSeconds, condition: condition));
 			return this;
 		}
 	}

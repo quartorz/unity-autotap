@@ -524,18 +524,21 @@ namespace UnityAutoTap
 		/// <summary>
 		/// Finds the control of every step that presses or releases, and checks the other steps against the device.
 		/// </summary>
-		/// <returns>The control of each press and release step.</returns>
+		/// <returns>
+		/// The control of each press and release step, at the index of the step. The other elements are <c>null</c>.
+		/// </returns>
 		/// <exception cref="ArgumentException">A step does not fit the device.</exception>
-		internal Dictionary<ControlSequence.Step, ButtonControl> ResolveSequence(ControlSequence sequence)
+		internal ButtonControl[] ResolveSequence(ControlSequence sequence)
 		{
-			var buttons = new Dictionary<ControlSequence.Step, ButtonControl>();
-			foreach (var step in sequence.Steps)
+			var buttons = new ButtonControl[sequence.Steps.Count];
+			for (var i = 0; i < buttons.Length; ++i)
 			{
+				var step = sequence.Steps[i];
 				switch (step.Kind)
 				{
 					case ControlSequence.StepKind.Press:
 					case ControlSequence.StepKind.Release:
-						buttons[step] = ResolveStepButton(step.Control);
+						buttons[i] = ResolveStepButton(step.Control);
 						break;
 					case ControlSequence.StepKind.Set:
 					{

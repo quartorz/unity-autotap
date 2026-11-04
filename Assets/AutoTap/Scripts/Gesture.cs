@@ -38,38 +38,152 @@ namespace UnityAutoTap
 	/// </remarks>
 	public sealed class Gesture
 	{
-		internal enum StepKind
+		/// <summary>
+		/// What a <see cref="Step"/> of a gesture does.
+		/// </summary>
+		public enum StepKind
 		{
+			/// <summary>
+			/// Presses a button (<see cref="Gesture.PressAt"/>, <see cref="Gesture.Press"/>).
+			/// </summary>
 			Press,
+
+			/// <summary>
+			/// Releases a button (<see cref="Gesture.Release"/>).
+			/// </summary>
 			Release,
+
+			/// <summary>
+			/// Moves the pointer to a position without pressing anything (<see cref="Gesture.HoverAt"/>).
+			/// </summary>
 			Hover,
+
+			/// <summary>
+			/// Moves the pointer in a straight line (<see cref="Gesture.MoveTo(Vector2, float)"/>,
+			/// <see cref="Gesture.MoveTo(Func{Vector2}, float)"/>).
+			/// </summary>
 			Move,
+
+			/// <summary>
+			/// Scrolls once (<see cref="Gesture.Scroll"/>).
+			/// </summary>
 			Scroll,
+
+			/// <summary>
+			/// Changes a control gradually (<see cref="Gesture.Set{T}"/>).
+			/// </summary>
 			Set,
+
+			/// <summary>
+			/// Keeps everything as it is for a time (<see cref="Gesture.Hold"/>).
+			/// </summary>
 			Hold,
+
+			/// <summary>
+			/// Keeps everything as it is until a condition is met (<see cref="Gesture.HoldUntil"/>).
+			/// </summary>
 			HoldUntil,
 		}
 
-		internal sealed class Step
+		/// <summary>
+		/// One step of the plan of a <see cref="Gesture"/>, as it was given. Which values a step has depends on its
+		/// <see cref="Kind"/>; the others are <c>null</c>, zero or empty.
+		/// </summary>
+		public readonly struct Step
 		{
-			public StepKind Kind;
-			public bool HasPosition;
-			public Vector2 Position;
-			public Func<Vector2> PositionFunc;
-			public string Button;
-			public Vector2 Delta;
-			public string Path;
-			public object Value;
-			public Type ValueType;
-			public float Seconds;
-			public Func<bool> Condition;
+			internal Step(
+				StepKind kind, Vector2? position = null, Func<Vector2> positionFunc = null, string button = null,
+				Vector2 delta = default, string path = null, object value = null, Type valueType = null,
+				float seconds = 0f, Func<bool> condition = null)
+			{
+				Kind = kind;
+				Position = position;
+				PositionFunc = positionFunc;
+				Button = button;
+				Delta = delta;
+				Path = path;
+				Value = value;
+				ValueType = valueType;
+				Seconds = seconds;
+				Condition = condition;
+			}
+
+			/// <summary>
+			/// What the step does.
+			/// </summary>
+			public StepKind Kind { get; }
+
+			/// <summary>
+			/// The position in screen pixels, for the first step (<see cref="StepKind.Press"/> of <see cref="PressAt"/>,
+			/// <see cref="StepKind.Hover"/>) and for a <see cref="StepKind.Move"/> whose destination was given as a
+			/// value. <c>null</c> otherwise, and for a move whose destination is <see cref="PositionFunc"/>.
+			/// </summary>
+			public Vector2? Position { get; }
+
+			/// <summary>
+			/// The function that returns the destination of a <see cref="StepKind.Move"/>, which is called when the
+			/// move starts. <c>null</c> for the other steps, and for a move whose destination is <see cref="Position"/>.
+			/// </summary>
+			public Func<Vector2> PositionFunc { get; }
+
+			/// <summary>
+			/// The button of a <see cref="StepKind.Press"/> or <see cref="StepKind.Release"/>, as it was given: the
+			/// path of a button control relative to the device. <c>null</c> selects the primary button, and is also what
+			/// the other steps have.
+			/// </summary>
+			public string Button { get; }
+
+			/// <summary>
+			/// The amount of a <see cref="StepKind.Scroll"/>. Zero for the other steps.
+			/// </summary>
+			public Vector2 Delta { get; }
+
+			/// <summary>
+			/// The path of the control that a <see cref="StepKind.Set"/> changes. <c>null</c> for the other steps.
+			/// </summary>
+			public string Path { get; }
+
+			/// <summary>
+			/// The value that a <see cref="StepKind.Set"/> has at the end of the step, boxed as <see cref="ValueType"/>.
+			/// <c>null</c> for the other steps.
+			/// </summary>
+			public object Value { get; }
+
+			/// <summary>
+			/// The type argument of a <see cref="StepKind.Set"/>. <c>null</c> for the other steps.
+			/// </summary>
+			public Type ValueType { get; }
+
+			/// <summary>
+			/// The time that a <see cref="StepKind.Move"/>, a <see cref="StepKind.Set"/> or a <see cref="StepKind.Hold"/>
+			/// takes, in seconds, and the timeout of a <see cref="StepKind.HoldUntil"/>. Zero for the other steps.
+			/// </summary>
+			public float Seconds { get; }
+
+			/// <summary>
+			/// The condition of a <see cref="StepKind.HoldUntil"/>. <c>null</c> for the other steps.
+			/// </summary>
+			public Func<bool> Condition { get; }
 		}
 
-		internal readonly List<Step> Steps = new List<Step>();
+		readonly List<Step> _steps = new List<Step>();
+		readonly IReadOnlyList<Step> _readOnlySteps;
 
 		Gesture()
 		{
+			_readOnlySteps = _steps.AsReadOnly();
 		}
+
+		/// <summary>
+		/// The plan, step by step, in the order the steps run. The first step is the one that
+		/// <see cref="PressAt"/> or <see cref="HoverAt"/> made.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// It is a read-only view of the gesture: steps that are added to the gesture later show up in it.
+		/// </para>
+		/// </remarks>
+		public IReadOnlyList<Step> Steps => _readOnlySteps;
 
 		/// <summary>
 		/// Starts a gesture with a press.
@@ -84,7 +198,7 @@ namespace UnityAutoTap
 		public static Gesture PressAt(Vector2 position, string button = null)
 		{
 			var gesture = new Gesture();
-			gesture.Steps.Add(new Step { Kind = StepKind.Press, HasPosition = true, Position = position, Button = button });
+			gesture._steps.Add(new Step(StepKind.Press, position: position, button: button));
 			return gesture;
 		}
 
@@ -96,7 +210,7 @@ namespace UnityAutoTap
 		public static Gesture HoverAt(Vector2 position)
 		{
 			var gesture = new Gesture();
-			gesture.Steps.Add(new Step { Kind = StepKind.Hover, HasPosition = true, Position = position });
+			gesture._steps.Add(new Step(StepKind.Hover, position: position));
 			return gesture;
 		}
 
@@ -108,7 +222,7 @@ namespace UnityAutoTap
 		public Gesture MoveTo(Vector2 position, float seconds)
 		{
 			RequireSeconds(seconds);
-			Steps.Add(new Step { Kind = StepKind.Move, HasPosition = true, Position = position, Seconds = seconds });
+			_steps.Add(new Step(StepKind.Move, position: position, seconds: seconds));
 			return this;
 		}
 
@@ -126,7 +240,7 @@ namespace UnityAutoTap
 			}
 
 			RequireSeconds(seconds);
-			Steps.Add(new Step { Kind = StepKind.Move, PositionFunc = position, Seconds = seconds });
+			_steps.Add(new Step(StepKind.Move, positionFunc: position, seconds: seconds));
 			return this;
 		}
 
@@ -136,7 +250,7 @@ namespace UnityAutoTap
 		/// <param name="button">The button to press. See <see cref="PressAt"/>.</param>
 		public Gesture Press(string button = null)
 		{
-			Steps.Add(new Step { Kind = StepKind.Press, Button = button });
+			_steps.Add(new Step(StepKind.Press, button: button));
 			return this;
 		}
 
@@ -146,7 +260,7 @@ namespace UnityAutoTap
 		/// <param name="button">The button to release. See <see cref="PressAt"/>.</param>
 		public Gesture Release(string button = null)
 		{
-			Steps.Add(new Step { Kind = StepKind.Release, Button = button });
+			_steps.Add(new Step(StepKind.Release, button: button));
 			return this;
 		}
 
@@ -156,7 +270,7 @@ namespace UnityAutoTap
 		/// <param name="delta">The amount, in the unit of the <c>scroll</c> control of the device.</param>
 		public Gesture Scroll(Vector2 delta)
 		{
-			Steps.Add(new Step { Kind = StepKind.Scroll, Delta = delta });
+			_steps.Add(new Step(StepKind.Scroll, delta: delta));
 			return this;
 		}
 
@@ -182,14 +296,7 @@ namespace UnityAutoTap
 			}
 
 			RequireSeconds(seconds);
-			Steps.Add(new Step
-			{
-				Kind = StepKind.Set,
-				Path = controlPath,
-				Value = value,
-				ValueType = typeof(T),
-				Seconds = seconds,
-			});
+			_steps.Add(new Step(StepKind.Set, path: controlPath, value: value, valueType: typeof(T), seconds: seconds));
 			return this;
 		}
 
@@ -200,7 +307,7 @@ namespace UnityAutoTap
 		public Gesture Hold(float seconds)
 		{
 			RequireSeconds(seconds);
-			Steps.Add(new Step { Kind = StepKind.Hold, Seconds = seconds });
+			_steps.Add(new Step(StepKind.Hold, seconds: seconds));
 			return this;
 		}
 
@@ -219,7 +326,7 @@ namespace UnityAutoTap
 			}
 
 			RequireSeconds(timeoutSeconds);
-			Steps.Add(new Step { Kind = StepKind.HoldUntil, Condition = condition, Seconds = timeoutSeconds });
+			_steps.Add(new Step(StepKind.HoldUntil, seconds: timeoutSeconds, condition: condition));
 			return this;
 		}
 
@@ -237,7 +344,7 @@ namespace UnityAutoTap
 		/// <exception cref="ArgumentException">The gesture does not fit a finger.</exception>
 		internal FingerPlan PlanForFinger()
 		{
-			if (Steps.Count == 0 || Steps[0].Kind != StepKind.Press || !Steps[0].HasPosition)
+			if (Steps.Count == 0 || Steps[0].Kind != StepKind.Press || !Steps[0].Position.HasValue)
 			{
 				throw new ArgumentException("A gesture for a finger has to start with PressAt.", nameof(Steps));
 			}
@@ -254,16 +361,16 @@ namespace UnityAutoTap
 				--count;
 			}
 
-			var points = new List<Vector2> { Steps[0].Position };
+			var points = new List<Vector2> { Steps[0].Position.Value };
 			for (var i = 1; i < count; ++i)
 			{
 				var step = Steps[i];
 				switch (step.Kind)
 				{
 					case StepKind.Move:
-						if (step.PositionFunc == null)
+						if (step.Position.HasValue)
 						{
-							points.Add(step.Position);
+							points.Add(step.Position.Value);
 						}
 
 						break;
@@ -280,7 +387,7 @@ namespace UnityAutoTap
 				}
 			}
 
-			return new FingerPlan(Steps[0].Position, points, count);
+			return new FingerPlan(Steps[0].Position.Value, points, count);
 		}
 
 		/// <summary>
@@ -291,24 +398,24 @@ namespace UnityAutoTap
 		internal PointerPlan PlanForPointer()
 		{
 			if (Steps.Count == 0
-				|| !Steps[0].HasPosition
+				|| !Steps[0].Position.HasValue
 				|| (Steps[0].Kind != StepKind.Press && Steps[0].Kind != StepKind.Hover))
 			{
 				throw new ArgumentException("A gesture for a pointer has to start with PressAt or HoverAt.", nameof(Steps));
 			}
 
-			var points = new List<Vector2> { Steps[0].Position };
+			var points = new List<Vector2> { Steps[0].Position.Value };
 			for (var i = 1; i < Steps.Count; ++i)
 			{
 				var step = Steps[i];
-				if (step.Kind == StepKind.Move && step.PositionFunc == null)
+				if (step.Kind == StepKind.Move && step.Position.HasValue)
 				{
-					points.Add(step.Position);
+					points.Add(step.Position.Value);
 				}
 			}
 
 			return new PointerPlan(
-				Steps[0].Position, Steps[0].Kind == StepKind.Press, Steps[0].Button, points, Steps.Count);
+				Steps[0].Position.Value, Steps[0].Kind == StepKind.Press, Steps[0].Button, points, Steps.Count);
 		}
 	}
 
