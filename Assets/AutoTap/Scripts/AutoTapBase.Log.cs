@@ -1,5 +1,7 @@
 #if ENABLE_AUTOTAP
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -130,6 +132,159 @@ namespace UnityAutoTap
 			public override string ToString()
 			{
 				return $"{Kind}: {Item}";
+			}
+		}
+
+		/// <summary>
+		/// What happened in one Dynamic input update, as returned by <see cref="GetLatestLogs"/>: a read-only list of
+		/// <see cref="LogEvent"/>s in the order the Input System processed them.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// It is a view of the log of this auto tap, not a copy, and it is valid only until the next Dynamic input
+		/// update starts, which builds the log again. After that, enumerating it, reading <see cref="Count"/> or reading
+		/// an element throws <see cref="InvalidOperationException"/>. Copy what is needed later (<c>ToArray()</c> of
+		/// LINQ, for example).
+		/// </para>
+		/// <para>
+		/// Enumerating it with <c>foreach</c> allocates nothing, the way a <see cref="List{T}"/> does not. Enumerating
+		/// it as an <see cref="IEnumerable{T}"/>, which LINQ does, boxes the enumerator and allocates.
+		/// </para>
+		/// <para>
+		/// A <c>default</c> value is an empty sequence.
+		/// </para>
+		/// </remarks>
+		public readonly struct LogEventSequence : IReadOnlyList<LogEvent>
+		{
+			readonly AutoTapBase _owner;
+			readonly int _version;
+
+			internal LogEventSequence(AutoTapBase owner, int version)
+			{
+				_owner = owner;
+				_version = version;
+			}
+
+			/// <summary>
+			/// The number of elements.
+			/// </summary>
+			/// <exception cref="InvalidOperationException">The log was built again since this sequence was returned.</exception>
+			public int Count
+			{
+				get
+				{
+					ThrowIfOutOfDate();
+					return _owner != null ? _owner._log.Count : 0;
+				}
+			}
+
+			/// <summary>
+			/// Gives the element at an index.
+			/// </summary>
+			/// <param name="index">The index, from 0 to <see cref="Count"/> - 1.</param>
+			/// <exception cref="InvalidOperationException">The log was built again since this sequence was returned.</exception>
+			/// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is not an index of this sequence.</exception>
+			public LogEvent this[int index]
+			{
+				get
+				{
+					ThrowIfOutOfDate();
+					if (_owner == null || (uint)index >= (uint)_owner._log.Count)
+					{
+						throw new ArgumentOutOfRangeException(nameof(index));
+					}
+
+					return _owner._log[index];
+				}
+			}
+
+			/// <summary>
+			/// Gives an enumerator that allocates nothing, which <c>foreach</c> uses.
+			/// </summary>
+			/// <exception cref="InvalidOperationException">The log was built again since this sequence was returned.</exception>
+			public Enumerator GetEnumerator()
+			{
+				ThrowIfOutOfDate();
+				return new Enumerator(this);
+			}
+
+			IEnumerator<LogEvent> IEnumerable<LogEvent>.GetEnumerator()
+			{
+				return GetEnumerator();
+			}
+
+			IEnumerator IEnumerable.GetEnumerator()
+			{
+				return GetEnumerator();
+			}
+
+			void ThrowIfOutOfDate()
+			{
+				if (_owner != null && _owner._logVersion != _version)
+				{
+					throw new InvalidOperationException(
+						"The log was built again by an input update after this sequence was returned. "
+						+ "Copy the elements that are needed later.");
+				}
+			}
+
+			/// <summary>
+			/// Enumerates a <see cref="LogEventSequence"/>.
+			/// </summary>
+			public struct Enumerator : IEnumerator<LogEvent>
+			{
+				readonly LogEventSequence _sequence;
+				int _index;
+				LogEvent _current;
+
+				internal Enumerator(LogEventSequence sequence)
+				{
+					_sequence = sequence;
+					_index = 0;
+					_current = default;
+				}
+
+				/// <summary>
+				/// The element that <see cref="MoveNext"/> moved to.
+				/// </summary>
+				public LogEvent Current => _current;
+
+				object IEnumerator.Current => _current;
+
+				/// <summary>
+				/// Moves to the next element.
+				/// </summary>
+				/// <returns><c>false</c> if there is none.</returns>
+				/// <exception cref="InvalidOperationException">The log was built again since the sequence was returned.</exception>
+				public bool MoveNext()
+				{
+					_sequence.ThrowIfOutOfDate();
+					if (_sequence._owner != null && _index < _sequence._owner._log.Count)
+					{
+						_current = _sequence._owner._log[_index];
+						++_index;
+						return true;
+					}
+
+					_current = default;
+					return false;
+				}
+
+				/// <summary>
+				/// Starts again before the first element.
+				/// </summary>
+				public void Reset()
+				{
+					_index = 0;
+					_current = default;
+				}
+
+				/// <summary>
+				/// Does nothing.
+				/// </summary>
+				public void Dispose()
+				{
+				}
 			}
 		}
 

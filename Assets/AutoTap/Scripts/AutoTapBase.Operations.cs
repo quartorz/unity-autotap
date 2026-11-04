@@ -569,14 +569,7 @@ namespace UnityAutoTap
 		/// </summary>
 		void OnInputUpdated()
 		{
-			if (_logIsStale)
-			{
-				_log.Clear();
-				_logIsStale = false;
-			}
-
 			var frame = Time.frameCount;
-			_logFrame = frame;
 			var anyEnded = false;
 			foreach (var operation in _operations)
 			{
@@ -696,7 +689,7 @@ namespace UnityAutoTap
 				_tail.Clear();
 			}
 
-			_logIsStale = true;
+			_inInputUpdate = false;
 		}
 
 		/// <summary>
@@ -723,14 +716,8 @@ namespace UnityAutoTap
 
 		void AppendLog(LogItem item, LogEventKind kind, long order)
 		{
-			if (_logIsStale)
-			{
-				_log.Clear();
-				_logIsStale = false;
-			}
-
-			_log.Add(new LogEvent(item, kind, order));
-			_logFrame = Time.frameCount;
+			// What happens outside an input update is told by the next one.
+			(_inInputUpdate ? _log : _logBetweenUpdates).Add(new LogEvent(item, kind, order));
 		}
 
 		void SortLogByOrder()

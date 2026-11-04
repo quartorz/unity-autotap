@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.UI;
 
 namespace UnityAutoTap
@@ -116,9 +117,10 @@ namespace UnityAutoTap
 		readonly List<Operation> _scratch = new List<Operation>();
 		readonly List<DeviceBoundOperation> _boundScratch = new List<DeviceBoundOperation>();
 		readonly List<LogEvent> _log = new List<LogEvent>();
+		readonly List<LogEvent> _logBetweenUpdates = new List<LogEvent>();
+		bool _inInputUpdate;
 		readonly List<KeyValuePair<long, LogItem>> _tail = new List<KeyValuePair<long, LogItem>>();
-		bool _logIsStale;
-		int _logFrame;
+		int _logVersion;
 		long _startSequence;
 
 		readonly Vector3[] _fourCorners = new Vector3[4];
@@ -135,7 +137,7 @@ namespace UnityAutoTap
 		protected AutoTapBase(int slotCount)
 		{
 			_ownsInput = true;
-			CreateSlots(slotCount);
+			Initialize(slotCount);
 		}
 
 		/// <summary>
@@ -155,10 +157,10 @@ namespace UnityAutoTap
 		{
 			_ownsInput = input == null;
 			_input = input;
-			CreateSlots(slotCount);
+			Initialize(slotCount);
 		}
 
-		void CreateSlots(int slotCount)
+		void Initialize(int slotCount)
 		{
 			if (slotCount < 1 || slotCount > VirtualInputCore.MaxFingers)
 			{
@@ -167,6 +169,38 @@ namespace UnityAutoTap
 			}
 
 			_slots = new FingerOperation[slotCount];
+
+			// The log is renewed by the input updates for as long as this instance exists, whether or not it is
+			// started and whichever virtual input it uses.
+			InputSystem.onBeforeUpdate += OnBeforeInputUpdate;
+		}
+
+		/// <summary>
+		/// Starts the log of the input update that begins: what happened in an earlier update is not in it, and what
+		/// happened between the updates (the reset of a device, for example) is.
+		/// </summary>
+		void OnBeforeInputUpdate()
+		{
+			if (InputState.currentUpdateType != InputUpdateType.Dynamic)
+			{
+				return;
+			}
+
+			_log.Clear();
+			_log.AddRange(_logBetweenUpdates);
+			_logBetweenUpdates.Clear();
+			++_logVersion;
+			_inInputUpdate = true;
+		}
+
+		/// <summary>
+		/// Drops the log, and with it the sequences that were returned.
+		/// </summary>
+		void DiscardLog()
+		{
+			_log.Clear();
+			_logBetweenUpdates.Clear();
+			++_logVersion;
 		}
 
 		/// <summary>
@@ -227,6 +261,7 @@ namespace UnityAutoTap
 				Stop();
 			}
 
+			InputSystem.onBeforeUpdate -= OnBeforeInputUpdate;
 			Unsubscribe();
 			_session?.Dispose();
 			_session = null;
@@ -241,7 +276,7 @@ namespace UnityAutoTap
 			_fingerOperations.Clear();
 			_deviceOperations.Clear();
 			_tail.Clear();
-			_log.Clear();
+			DiscardLog();
 		}
 
 		/// <summary>
@@ -379,7 +414,7 @@ namespace UnityAutoTap
 
 		/// <summary>
 		/// Returns what happened in the latest Dynamic input update, as one sequence in the order the Input System
-		/// processed it.
+		/// processed it. It is empty if nothing happened in that update.
 		/// </summary>
 		/// <remarks>
 		/// <para>
@@ -388,16 +423,30 @@ namespace UnityAutoTap
 		/// update, they are several elements.
 		/// </para>
 		/// <para>
-		/// The sequence is renewed at the start of each Dynamic input update, not at the start of
-		/// <see cref="Update(float)"/>. An operation is processed by the input update at the start of a frame, so it
-		/// can be read in <see cref="OnPreUpdate"/>, in <see cref="Update(int)"/>, in <see cref="OnPostUpdate"/> and
-		/// after <see cref="Update(float)"/> of that frame, until the next frame's input update. A frame without an
-		/// input update has an empty sequence.
+		/// The sequence is built again at the start of each Dynamic input update, from the creation of this instance
+		/// until it is disposed: whether it is started or stopped, and whatever the state of the virtual input is.
+		/// Nothing else renews it, so the same elements are returned until the next Dynamic input update starts. An
+		/// operation is processed by the input update at the start of a frame, so it can be read in
+		/// <see cref="OnPreUpdate"/>, in <see cref="Update(int)"/>, in <see cref="OnPostUpdate"/> and after
+		/// <see cref="Update(float)"/> of that frame, until the next frame's input update.
+		/// </para>
+		/// <para>
+		/// The sequence that is returned is valid only until the next Dynamic input update starts. Once that happened,
+		/// enumerating it, reading its <see cref="LogEventSequence.Count"/> or an element of it throws
+		/// <see cref="InvalidOperationException"/>. Copy what is needed later (<c>ToArray()</c> of LINQ, for example).
+		/// Enumerating it with <c>foreach</c> allocates nothing.
+		/// </para>
+		/// <para>
+		/// What happens between two input updates, such as the Input System resetting a device (which ends the
+		/// operations that use it), is not in the sequence of the update before it: it is in the sequence of the next
+		/// update, at the position of its sequence number.
 		/// </para>
 		/// <para>
 		/// An operation started in frame N is queued by <c>Simulate</c> and processed by the input update of frame N + 1,
 		/// so it is in the sequence of frame N + 1. The <see cref="LogItem"/> that <c>Simulate</c> returns is returned at
-		/// once, before any of this.
+		/// once, before any of this. The items in the sequence are the same objects that <c>Simulate</c> returned, and
+		/// they keep being filled in (see <see cref="LogItem"/>), so what an item shows when it is read is what is known
+		/// then, not at the time of the element.
 		/// </para>
 		/// <para>
 		/// Elements are ordered by <see cref="LogEvent.Order"/>. Elements without an order come after those that
@@ -423,11 +472,10 @@ namespace UnityAutoTap
 		/// <see cref="Stop"/>.
 		/// </para>
 		/// </remarks>
-		public IEnumerable<LogEvent> GetLatestLogs()
+		/// <returns>The sequence of the latest input update.</returns>
+		public LogEventSequence GetLatestLogs()
 		{
-			// There is one Dynamic input update per frame, so a sequence of an earlier frame is out of date even if
-			// no input update came to renew it (for example after the virtual input was removed).
-			return _logFrame == Time.frameCount ? _log.ToArray() : Array.Empty<LogEvent>();
+			return new LogEventSequence(this, _logVersion);
 		}
 
 		/// <summary>
