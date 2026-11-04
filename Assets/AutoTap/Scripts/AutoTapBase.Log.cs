@@ -177,9 +177,10 @@ namespace UnityAutoTap
 		/// <remarks>
 		/// <para>
 		/// It is a view of the log of this auto tap, not a copy, and it is valid only until the next
-		/// <see cref="Update(float)"/> that runs, which builds the log again. After that, and after
-		/// <see cref="Dispose"/>, enumerating it, reading <see cref="Count"/> or reading an element throws
-		/// <see cref="InvalidOperationException"/>. Copy what is needed later (<c>ToArray()</c> of LINQ, for example).
+		/// <see cref="Update(float)"/> that runs, which builds the log again. After that, and after <see cref="Start"/>
+		/// and <see cref="Dispose"/>, which empty the log, enumerating it, reading <see cref="Count"/> or reading an
+		/// element throws <see cref="InvalidOperationException"/>. Copy what is needed later (<c>ToArray()</c> of LINQ,
+		/// for example).
 		/// </para>
 		/// <para>
 		/// Enumerating it with <c>foreach</c> allocates nothing, the way a <see cref="List{T}"/> does not. Enumerating
@@ -267,8 +268,8 @@ namespace UnityAutoTap
 				if (_owner != null && _owner._logVersion != _version)
 				{
 					throw new InvalidOperationException(
-						"The log was built again after this sequence was returned, which every Update(float) does. "
-						+ "Copy the elements that are needed later.");
+						"The log was built again or emptied after this sequence was returned, which every Update(float), "
+						+ "Start and Dispose do. Copy the elements that are needed later.");
 				}
 			}
 

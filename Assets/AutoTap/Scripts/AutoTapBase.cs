@@ -270,10 +270,16 @@ namespace UnityAutoTap
 		/// nothing.
 		/// </summary>
 		/// <remarks>
+		/// <para>
+		/// The log is emptied: <see cref="GetLatestLogs"/> returns an empty sequence until the first
+		/// <see cref="Update(float)"/> of this run builds it, and the sequences that were returned before are out of date
+		/// (see <see cref="LogEventSequence"/>).
+		/// </para>
+		/// <para>
 		/// What an earlier run kept for the log that the next <see cref="Update(float)"/> builds, such as the end of an
 		/// operation that <see cref="Stop"/> ended outside <see cref="Update(float)"/>, is discarded, so that it does
-		/// not show up in the log of this run. The sequence that <see cref="GetLatestLogs"/> returns stays what it was
-		/// until the first <see cref="Update(float)"/> of this run builds it again.
+		/// not show up in the log of this run.
+		/// </para>
 		/// </remarks>
 		/// <exception cref="InvalidOperationException">Another instance is the current one.</exception>
 		/// <exception cref="ObjectDisposedException">This instance was disposed.</exception>
@@ -297,8 +303,8 @@ namespace UnityAutoTap
 				_input = _session;
 			}
 
-			// What an earlier run kept for the next log does not belong to this run.
-			_pendingLog.Clear();
+			// What an earlier run left in the log, and what it kept for the next one, does not belong to this run.
+			DiscardLog();
 			Subscribe();
 			Enabled = true;
 			Current = this;
@@ -426,13 +432,14 @@ namespace UnityAutoTap
 		/// </para>
 		/// <para>
 		/// The sequence is built again at the start of every <see cref="Update(float)"/> that runs, that is, while this
-		/// instance is <see cref="Enabled"/>. Nothing else renews it, so the same elements are returned until the next
-		/// <see cref="Update(float)"/> starts, also when frames pass without a call and after <see cref="Stop"/>.
-		/// <see cref="Dispose"/> empties it.
+		/// instance is <see cref="Enabled"/>. <see cref="Start"/> and <see cref="Dispose"/> empty it. Nothing else
+		/// changes it, so the same elements are returned until the next <see cref="Update(float)"/> starts, also when
+		/// frames pass without a call and after <see cref="Stop"/>.
 		/// </para>
 		/// <para>
-		/// The sequence that is returned is valid only until the next <see cref="Update(float)"/> starts. Once that
-		/// happened, enumerating it, reading its <see cref="LogEventSequence.Count"/> or an element of it throws
+		/// The sequence that is returned is valid only until the next <see cref="Update(float)"/> starts, or until
+		/// <see cref="Start"/> or <see cref="Dispose"/> is called. Once that happened, enumerating it, reading its
+		/// <see cref="LogEventSequence.Count"/> or an element of it throws
 		/// <see cref="InvalidOperationException"/>. Copy what is needed later (<c>ToArray()</c> of LINQ, for example).
 		/// Enumerating it with <c>foreach</c> allocates nothing. While <see cref="Update(float)"/> runs, what it causes
 		/// is added to the sequence, and a sequence that was returned earlier in the same call shows it too (see

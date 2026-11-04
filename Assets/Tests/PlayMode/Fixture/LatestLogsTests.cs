@@ -170,7 +170,10 @@ namespace UnityAutoTap.Tests
 
 			Auto.Stop();
 			yield return Steps(2);
+			Assert.That(Auto.GetLatestLogs().Select(l => (l.Item, l.Kind)), Is.EqualTo(new[] { (first, LogEventKind.Started) }),
+				"Stop leaves the sequence as it was");
 			Auto.Start();
+			Assert.That(Auto.GetLatestLogs(), Is.Empty, "Start empties it, until the first Update of the run builds it");
 			LogItem second = null;
 			yield return Step(() => second = Auto.SimulateTap(1, Rig.Center(button.gameObject), 0.2f));
 			yield return Until(() => second.Completed, "the tap of the second run to end");

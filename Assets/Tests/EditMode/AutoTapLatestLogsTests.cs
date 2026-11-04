@@ -483,6 +483,66 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
+		public void StartEmptiesTheSequenceUntilTheFirstUpdateOfTheRun()
+		{
+			_autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
+			Frame();
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.EqualTo(1));
+			_autoTap.Stop();
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.EqualTo(1), "Stop leaves the sequence as it was");
+
+			_autoTap.Start();
+
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero);
+			Assert.That(_autoTap.GetLatestLogs(), Is.Empty);
+			InputSystem.Update();
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "an input update does not build it");
+
+			var next = _autoTap.Tap(1, TestScene.At(0.4f, 0.2f), 1f);
+			Frame();
+
+			var logs = _autoTap.GetLatestLogs();
+			Assert.That(logs.Select(e => (e.Item, e.Kind)), Is.EqualTo(new[] { (next, AutoTapBase.LogEventKind.Started) }),
+				"the first Update of the run builds it");
+		}
+
+		[Test]
+		public void StartOnTheStartedInstanceLeavesTheSequenceAlone()
+		{
+			_autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
+			Frame();
+			var logs = _autoTap.GetLatestLogs();
+			Assert.That(logs.Count, Is.EqualTo(1));
+
+			_autoTap.Start();
+
+			Assert.That(logs.Count, Is.EqualTo(1), "it does nothing, so the sequence is still valid");
+			Assert.That(Kinds(_autoTap.GetLatestLogs()), Is.EqualTo(new[] { AutoTapBase.LogEventKind.Started }));
+		}
+
+		[Test]
+		public void ASequenceThatWasReceivedBeforeStartThrowsAfterIt()
+		{
+			_autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
+			Frame();
+			var old = _autoTap.GetLatestLogs();
+			var enumerator = old.GetEnumerator();
+			Assert.That(enumerator.MoveNext(), Is.True);
+			_autoTap.Stop();
+			Assert.That(old.Count, Is.EqualTo(1), "Stop does not make it out of date");
+
+			_autoTap.Start();
+
+			Assert.Throws<InvalidOperationException>(() => { foreach (var _ in old) { } });
+			Assert.Throws<InvalidOperationException>(() => old.GetEnumerator());
+			Assert.Throws<InvalidOperationException>(() => { var _ = old.Count; });
+			Assert.Throws<InvalidOperationException>(() => { var _ = old[0]; });
+			Assert.Throws<InvalidOperationException>(() => old.ToList());
+			Assert.Throws<InvalidOperationException>(() => enumerator.MoveNext(), "an enumerator that was running too");
+			Assert.That(_autoTap.GetLatestLogs().Count, Is.Zero, "the new one is fine");
+		}
+
+		[Test]
 		public void EveryEndIsInOneSequenceOnly()
 		{
 			var all = new List<AutoTapBase.LogEvent>();
