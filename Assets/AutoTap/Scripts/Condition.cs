@@ -17,6 +17,8 @@ namespace UnityAutoTap
 
 	public class Once : Condition
 	{
+		public override string Status => Value ? "0 / 1" : "1 / 1";
+
 		public override void OnLoop()
 		{
 			Value = false;
@@ -27,6 +29,8 @@ namespace UnityAutoTap
 	{
 		public int Count;
 		public int CurrentCount;
+
+		public override string Status => $"{CurrentCount} / {Count}";
 
 		public override void Prepare()
 		{
