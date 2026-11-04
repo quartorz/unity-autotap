@@ -388,7 +388,7 @@ foreach (var e in GetLatestLogs())
 
 - 戻り値は `LogEventSequence` で、`IReadOnlyList<LogEvent>` を実装する readonly struct です。auto tap のログを直接参照するもので、写しではありません。`foreach`、`Count`、添字では、割り当てが起きません。LINQ や `IEnumerable<LogEvent>` を通すと、enumerator が boxing されて割り当てが起きます。`default` の値は空の並びです。
 - 並びは、動いた `Update(float)` の頭で作り直され、それ以外のときには作り直されません。並びが有効なのは、次の `Update(float)` が始まるまでです。そのあとで、並びを回す、`Count` を読む、要素を読む、のどれをしても `InvalidOperationException` を投げます。新しい並びが空のときも同じです。並びの外の添字は `ArgumentOutOfRangeException` を投げます。要素をあとで使うときは、写しを取ってください（たとえば `ToArray()` で）。
-- 最後の `Update(float)` の並びは、次の `Update(float)` が始まるまで、最新のままです。時間がたっても空にはなりません。auto tap が有効でない間、`Update(float)` は何もしないので、`Start` の前と `Stop` のあとでは、並びは変わりません。`Dispose` は並びを空にし、それまでに返した並びを無効にします。一度も開始しなかった auto tap も、`Dispose` してください。
+- 最後の `Update(float)` の並びは、次の `Update(float)` が始まるまで、最新のままです。時間がたっても空にはなりません。auto tap が有効でない間、`Update(float)` は何もしないので、`Start` の前と `Stop` のあとでは、並びは変わりません。`Dispose` は並びを空にし、それまでに返した並びを無効にします。
 - どの並びに入るかは、起きたのが `Update(float)` の中か外かで決まります。
   - `Update(float)` の外で起きたことは、取っておかれ、次の `Update(float)` が作る並びの先頭になります。フレームの頭の入力更新が処理したこと（操作の開始、ドラッグの開始、操作の終わり）と、前の `Update(float)` が終わったあとに起きたことです。たとえば、Input System がデバイスをリセットする（`InputSystem.ResetDevice` や、デバイスを無効にしたとき）と、そのデバイスを使う操作は、その時点で終わります。`Update(float)` を呼ばなかったフレームで起きたことも、失われません。
   - `Update(float)` の中で起きたことは、その場で、その呼び出しの並びに足されます。`OnPreUpdate`、`Update(int)`、`OnPostUpdate`、`OnTapCompleted` と、それらが呼ぶもの（シナリオなど）が含まれます。たとえば、シナリオが呼んだ `Stop` が終わらせた操作の `Completed` は、その呼び出しの並びに入ります。そこで呼んだ `ResetDevice` や `DisableDevice` が終わらせた操作の `Completed` も同じです。

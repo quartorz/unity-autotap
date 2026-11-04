@@ -515,8 +515,7 @@ foreach (var e in GetLatestLogs())
   `ArgumentOutOfRangeException`. To use the elements later, make a copy (for example with `ToArray()`).
 - The sequence of the latest `Update(float)` stays the latest one until the next `Update(float)` starts. Nothing empties it
   when time passes. `Update(float)` does nothing while the auto tap is not enabled, so the sequence does not change before
-  `Start` and after `Stop`. `Dispose` empties it and makes the sequences that were returned invalid. Dispose an auto tap
-  that was never started, too.
+  `Start` and after `Stop`. `Dispose` empties it and makes the sequences that were returned invalid.
 - What goes into which sequence depends on whether it happens inside `Update(float)`.
   - What happens outside `Update(float)` is kept, and is the start of the sequence that the next `Update(float)` builds.
     That is what the input update at the start of the frame processed (the start of an operation, the start of its drag,
