@@ -191,9 +191,8 @@ namespace UnityAutoTap
 		/// reset of a device ended, for example) is added to the log at once, so a sequence that was returned earlier in
 		/// the same <see cref="Update(float)"/> shows it too, and it does not throw. <see cref="Count"/> is the number at
 		/// the time it is read, and an enumeration or a loop over the indexes visits what was added after it started.
-		/// An element takes its place by the order of the log, so one that is added in front of the position of a running
-		/// enumeration moves the elements behind it by one place, and the element that was visited last is visited
-		/// once more. Make a copy first if that matters.
+		/// If an element is added in the middle of an enumeration inside <see cref="Update(float)"/>, by
+		/// <see cref="Stop"/> for example, the enumeration can read the same element again.
 		/// </para>
 		/// <para>
 		/// A <c>default</c> value is an empty sequence.

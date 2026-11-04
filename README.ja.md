@@ -18,7 +18,7 @@ UI のハンドラーを直接呼ぶことはしません。Input System に仮�
 
 1. Unity Package Manager を開きます。
 2. "Add package from git URL" を選びます。
-3. `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.1.1` を入力します。
+3. `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.1.2` を入力します。
 4. Scripting Define Symbols に `ENABLE_AUTOTAP` を足します。パッケージ全体が、このシンボルがあるときだけコンパイルされます。
 
 Input System も仮想デバイスも要らない v1 を使い続けるときは、URL の末尾を `#v1.5.2` にします: `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v1.5.2`。
@@ -387,15 +387,15 @@ foreach (var e in GetLatestLogs())
 ```
 
 - 戻り値は `LogEventSequence` で、`IReadOnlyList<LogEvent>` を実装する readonly struct です。auto tap のログを直接参照するもので、写しではありません。`foreach`、`Count`、添字では、割り当てが起きません。LINQ や `IEnumerable<LogEvent>` を通すと、enumerator が boxing されて割り当てが起きます。`default` の値は空の並びです。
-- 並びは、動いた `Update(float)` の頭で作り直され、それ以外のときには作り直されません。並びが有効なのは、次の `Update(float)` が始まるまでです。そのあとで、並びを回す、`Count` を読む、要素を読む、のどれをしても `InvalidOperationException` を投げます。新しい並びが空のときも同じです。並びの外の添字は `ArgumentOutOfRangeException` を投げます。要素をあとで使うときは、写しを取ってください（たとえば `ToArray()` で）。
-- 最後の `Update(float)` の並びは、次の `Update(float)` が始まるまで、最新のままです。時間がたっても空にはなりません。auto tap が有効でない間、`Update(float)` は何もしないので、`Start` の前と `Stop` のあとでは、並びは変わりません。`Dispose` は並びを空にし、それまでに返した並びを無効にします。
+- 並びは、動いた `Update(float)` の頭で作り直され、`Start` と `Dispose` で空になります。それ以外のときには変わりません。並びが有効なのは、次の `Update(float)` が始まるまで、または `Start` か `Dispose` を呼ぶまでです。そのあとで、並びを回す、`Count` を読む、要素を読む、のどれをしても `InvalidOperationException` を投げます。新しい並びが空のときも同じです。並びの外の添字は `ArgumentOutOfRangeException` を投げます。要素をあとで使うときは、写しを取ってください（たとえば `ToArray()` で）。
+- 最後の `Update(float)` の並びは、次の `Update(float)` が始まるまで、最新のままです。時間がたっても空にはなりません。auto tap が有効でない間、`Update(float)` は何もしないので、`Stop` のあとでは、並びは変わりません。`Start` は並びを空にするので、`Start` のあとは、その実行の最初の `Update(float)` が並びを作るまで、並びは空です。`Dispose` も並びを空にします。どちらも、それまでに返した並びを無効にします。
 - どの並びに入るかは、起きたのが `Update(float)` の中か外かで決まります。
   - `Update(float)` の外で起きたことは、取っておかれ、次の `Update(float)` が作る並びの先頭になります。フレームの頭の入力更新が処理したこと（操作の開始、ドラッグの開始、操作の終わり）と、前の `Update(float)` が終わったあとに起きたことです。たとえば、Input System がデバイスをリセットする（`InputSystem.ResetDevice` や、デバイスを無効にしたとき）と、そのデバイスを使う操作は、その時点で終わります。`Update(float)` を呼ばなかったフレームで起きたことも、失われません。
   - `Update(float)` の中で起きたことは、その場で、その呼び出しの並びに足されます。`OnPreUpdate`、`Update(int)`、`OnPostUpdate`、`OnTapCompleted` と、それらが呼ぶもの（シナリオなど）が含まれます。たとえば、シナリオが呼んだ `Stop` が終わらせた操作の `Completed` は、その呼び出しの並びに入ります。そこで呼んだ `ResetDevice` や `DisableDevice` が終わらせた操作の `Completed` も同じです。
 
   どれも、入る並びは 1 つだけです。2 つに入ることはなく、下の `Update(float)` の外での `Stop` を除いて、どれにも入らないこともありません。`LogItem` は、どの並びに入る場合も、すぐに書き換わります。
 - フレーム N で Simulate した操作は、フレーム N + 1 の入力更新が処理するので、フレーム N + 1 の `Update(float)` が作る並びに入ります。そのフレームの `OnPreUpdate`、`Update(int)`、`OnPostUpdate`、`Update(float)` のあとで読めます。
-- `Update(float)` の中で足されたものは、同じ呼び出しの中ですでに返した並びからも見えます。並びは有効なままで、例外も投げません。`Count` はそのときの数です。`foreach` などで回している最中でも、始まったあとに足された要素まで回ります。要素は `Order` で位置が決まるので、回している位置より前に足された要素があると、それより後ろの要素が 1 つずつ後ろにずれ、最後に読んだ要素をもう一度読みます。それが困るときは、先に写しを取ってください。
+- `Update(float)` の中で足されたものは、同じ呼び出しの中ですでに返した並びからも見えます。並びは有効なままで、例外も投げません。`Count` はそのときの数です。`foreach` などで回している最中でも、始まったあとに足された要素まで回ります。`Update(float)` の中で並びを回している最中に、`Stop` などで要素が足されると、その列挙で同じ要素をもう一度読むことがあります。
 - 1 つの item に、前の `Update(float)` から今までに複数のことが起きたときは、複数の要素になります。
 - 要素は `Order` の順です。番号のない要素は、ほかの要素のあとに、item を Simulate した順に並びます。次のものの `Completed` です。
   - `Dropped` になった item。そのイベントを捨てた入力更新のあとの `Update(float)` の並びに入る。
@@ -481,6 +481,20 @@ auto tap か、ほかの session が生きている間、仮想入力は Input S
 - 2 つ目の仮想タッチスクリーン。1 つのタッチスクリーンには 10 のタッチがあり、それが指の数です。
 - "Process Events In Dynamic Update" 以外の update mode。
 - 生のイベントの記録と再生。それには `InputEventTrace` を使います。
+
+## 2.1.1 から 2.1.2 への移行
+
+2.1.2 は、`Start` が `GetLatestLogs()` の並びを空にするようにします。2.1.1 では、前の実行の最後の `Update(float)` の並びが、新しい実行の最初の `Update(float)` まで残っていました。シグネチャは変わっていないので、コードはそのままコンパイルできます。
+
+| | 2.1.1 | 2.1.2 |
+|---|---|---|
+| `Start` のあと、最初の `Update(float)` までの `GetLatestLogs()` | 前の実行の最後の `Update(float)` の並び | 空 |
+| `Start` より前に受け取った並び | 有効なまま | 無効。使うと `InvalidOperationException` を投げる |
+
+自分のコードで確かめること:
+
+- `Stop` と `Start` をまたいで並びを持ち続けているなら、`Stop` の前に写しを取ってください（たとえば `ToArray()` で）。
+- `Start` のあと、最初の `Update(float)` より前に `GetLatestLogs()` を読んで、前の実行の並びが返ることを当てにしていたなら、もう返りません。空の並びが返ります。
 
 ## 2.1.0 から 2.1.1 への移行
 

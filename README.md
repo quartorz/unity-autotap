@@ -25,7 +25,7 @@ it: pointer ids, enter and exit, long presses, drags, scrolling, navigation with
 
 1. Open the Unity Package Manager.
 2. Select "Add package from git URL".
-3. Enter `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.1.1`.
+3. Enter `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.1.2`.
 4. Add `ENABLE_AUTOTAP` to the Scripting Define Symbols. The whole package is compiled only with this symbol.
 
 To stay on v1, which needs neither the Input System nor virtual devices, end the URL with `#v1.5.2`:
@@ -509,13 +509,15 @@ foreach (var e in GetLatestLogs())
 - The return value is a `LogEventSequence`, a readonly struct that implements `IReadOnlyList<LogEvent>`. It is a view of
   the log of the auto tap, not a copy. A `foreach` over it, `Count` and the indexer allocate nothing. Going through
   LINQ or `IEnumerable<LogEvent>` boxes the enumerator, which allocates. A `default` value is an empty sequence.
-- The sequence is rebuilt at the start of every `Update(float)` that runs, and at no other time. It is valid until the
-  next `Update(float)` starts. After that, enumerating it, reading its `Count` and reading an element all throw
+- The sequence is rebuilt at the start of every `Update(float)` that runs, and emptied by `Start` and `Dispose`. It does
+  not change at any other time. It is valid until the next `Update(float)` starts, or `Start` or `Dispose` is called.
+  After that, enumerating it, reading its `Count` and reading an element all throw
   `InvalidOperationException`, also when the new sequence is empty. An index outside the sequence throws
   `ArgumentOutOfRangeException`. To use the elements later, make a copy (for example with `ToArray()`).
 - The sequence of the latest `Update(float)` stays the latest one until the next `Update(float)` starts. Nothing empties it
-  when time passes. `Update(float)` does nothing while the auto tap is not enabled, so the sequence does not change before
-  `Start` and after `Stop`. `Dispose` empties it and makes the sequences that were returned invalid.
+  when time passes. `Update(float)` does nothing while the auto tap is not enabled, so the sequence does not change after
+  `Stop`. `Start` empties it, so after `Start` the sequence is empty until the first `Update(float)` of the run builds it,
+  and `Dispose` empties it too. Both make the sequences that were returned invalid.
 - What goes into which sequence depends on whether it happens inside `Update(float)`.
   - What happens outside `Update(float)` is kept, and is the start of the sequence that the next `Update(float)` builds.
     That is what the input update at the start of the frame processed (the start of an operation, the start of its drag,
@@ -534,9 +536,8 @@ foreach (var e in GetLatestLogs())
   `Update(float)` of that frame.
 - What is added inside `Update(float)` is also visible in a sequence that was returned earlier in the same call, and the
   sequence stays valid: the `Count` that you read is the one of that moment, and an enumeration that is running visits what
-  was added after it started. Nothing is thrown. An element takes its place by its `Order`, so an element that is added in
-  front of the position of a running enumeration moves the ones behind it by one place, and the element that was visited
-  last is visited once more. Make a copy first if that matters.
+  was added after it started. Nothing is thrown. If an element is added in the middle of an enumeration inside
+  `Update(float)`, by `Stop` for example, the enumeration can read the same element again.
 - When several things happened to one item since the previous `Update(float)`, they are several elements.
 - Elements are ordered by `Order`. The elements without a number come after the others, in the order the items were
   simulated. They are the `Completed` of
@@ -678,6 +679,23 @@ The virtual input changes the Input System for as long as an auto tap, or any ot
 - A second virtual touchscreen. One touchscreen has 10 touches, which is the number of fingers.
 - An update mode other than "Process Events In Dynamic Update".
 - Recording and replaying raw events. `InputEventTrace` does that.
+
+## Moving from 2.1.1 to 2.1.2
+
+2.1.2 makes `Start` empty the sequence that `GetLatestLogs()` returns. In 2.1.1 the sequence of the last `Update(float)` of
+the earlier run stayed until the first `Update(float)` of the new run. No signature changed, so the code compiles as it
+did.
+
+| | 2.1.1 | 2.1.2 |
+|---|---|---|
+| `GetLatestLogs()` after `Start`, before the first `Update(float)` | the sequence of the last `Update(float)` of the earlier run | empty |
+| A sequence that was returned before `Start` | still valid | out of date: using it throws `InvalidOperationException` |
+
+What to check in your code:
+
+- If you keep a sequence across `Stop` and `Start`, make a copy before `Start` (for example with `ToArray()`).
+- If you read `GetLatestLogs()` after `Start` and before the first `Update(float)`, and counted on getting the sequence of
+  the earlier run, you get an empty sequence now.
 
 ## Moving from 2.1.0 to 2.1.1
 
