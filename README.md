@@ -68,11 +68,11 @@ autoTap.Stop();
 autoTap.Dispose();   // calls Stop if it is still running
 ```
 
-`SetupMarkers` only shows the markers. The slots exist from the constructor, so `Update` and `Simulate` work without it;
-nothing shows where the fingers and pointers are then. It can be called at any time, also while the auto tap runs, and a
-second call replaces the markers of the first. A `null` canvas shows no marker. `Simulate(slot, ...)` throws
-`ArgumentOutOfRangeException` for a number that is not a slot (0 to the number of slots minus 1). After `Dispose`,
-`Start`, `SetupMarkers` and `Simulate` throw `ObjectDisposedException`.
+`SetupMarkers` only shows the markers. The slots exist from the constructor, so `Start`, `Update` and `Simulate` work
+without it; nothing shows where the fingers and pointers are then. It can be called at any time, also while the auto
+tap runs, and a second call replaces the markers of the first. A `null` canvas shows no marker. `Simulate(slot, ...)`
+throws `ArgumentOutOfRangeException` for a number that is not a slot (0 to the number of slots minus 1). After
+`Dispose`, `Start`, `SetupMarkers` and every `Simulate` throw `ObjectDisposedException`.
 
 Only one auto tap can be started at a time (`AutoTapBase.Current`); `Start` on another one throws
 `InvalidOperationException`.
@@ -91,6 +91,17 @@ and so on, from `UnityEngine.InputSystem`.
 | Pointer: `Simulate<TDevice>(Gesture, number)` or `Simulate(layout, Gesture, number)` | any pointer that is not a touchscreen: a mouse, a pen, a custom pointer layout | moving without pressing (hover), left, right, middle, forward and back buttons, a pen's tip, eraser, barrel buttons, pressure and tilt, scroll |
 | Device: `Simulate<TDevice>(ControlSequence, number)` or `Simulate(layout, ControlSequence, number)` | any device that is not a pointer: a keyboard, a gamepad, a joystick, a sensor, any custom layout | write values to controls by path, change them over time, text and IME composition for a keyboard |
 
+There are six `Simulate` methods. Each returns a `LogItem`:
+
+```csharp
+LogItem Simulate(int slot, Gesture gesture);
+LogItem Simulate<TDevice>(Gesture gesture, int number = 0) where TDevice : Pointer;
+LogItem Simulate(string layout, Gesture gesture, int number = 0);
+LogItem Simulate<TDevice>(ControlSequence sequence, int number = 0) where TDevice : InputDevice;
+LogItem Simulate(string layout, ControlSequence sequence, int number = 0);
+LogItem Simulate(Key key, float duration = 0f, params Key[] modifiers);
+```
+
 `Simulate<TDevice>` takes `TDevice : Pointer` with a `Gesture` and `TDevice : InputDevice` with a `ControlSequence`. The
 Input System decides the layout of the virtual device from the type. For a layout that has no C# type, give its name:
 `Simulate("MyLayout", ...)`. The type and the name are two ways to name the same virtual device: `Simulate<Mouse>(...)`
@@ -101,16 +112,20 @@ of the same layout.
 There is one shortcut, `Simulate(Key key, float duration = 0f, params Key[] modifiers)`. It presses a key of the virtual
 keyboard.
 
-A virtual device is added the first time it is used, not when the auto tap starts, even if that first call returns
-`null` for another reason. Code that only presses keys never adds a touchscreen or a mouse.
+A virtual device is added when a `Simulate` call of a started auto tap first needs it, not when the auto tap starts. A
+pointer or a device is added by the first call that names it, even if that call returns `null` for another reason. The
+touchscreen is added when the first finger is taken, so a call that returns `null` before that does not add it. Code
+that only presses keys never adds a touchscreen or a mouse.
 
 **A finger is pressed through its slot, not through `Touchscreen`.** `Touchscreen` is derived from `Pointer`, so the
 constraint `where TDevice : Pointer` cannot keep it out. `Simulate<Touchscreen>(...)` and `Simulate("Touchscreen", ...)`
-compile, and throw `ArgumentException` at run time. Use `Simulate(int slot, Gesture)`.
+compile, and throw `ArgumentException` at run time. Use `Simulate(int slot, Gesture)`. The exception comes from a started
+auto tap: before `Start` and after `Stop`, `Simulate` returns `null` before it looks at the device (see
+[What a `Simulate` method does](#what-a-simulate-method-does)).
 
-The `Simulate` methods are `protected internal` members of `AutoTapBase`, and `Scenario` has the same methods that
-forward to its owner. `LogItem`, `LogEvent`, `LogEventKind`, `LogItemKind` and `EndReason` are types nested in
-`AutoTapBase`.
+The `Simulate` methods are `protected internal` members of `AutoTapBase`, and `Scenario` has the same methods, as
+`protected` members that forward to its owner. `LogItem`, `LogEvent`, `LogEventKind`, `LogItemKind` and `EndReason` are
+types nested in `AutoTapBase`.
 
 ### Fingers and pointers: `Gesture`
 
@@ -162,6 +177,9 @@ A gesture that does not fit its target (a `HoverAt` for a finger, a control that
 - `Touchscreen`, as a type or as a layout (see above),
 - a layout that is not derived from `Pointer`, given with a `Gesture`,
 - a type or a layout that is derived from `Pointer`, given with a `ControlSequence`.
+
+A `null` gesture or sequence makes `Simulate` throw `ArgumentNullException`, and an empty layout name makes it throw
+`ArgumentException`.
 
 The UI handles the primary button of any pointer and the right and middle buttons of a mouse. Presses of other buttons
 (forward, back, a pen's eraser and barrel buttons) are written to the device, for code that reads them, but they never
@@ -270,6 +288,10 @@ Simulate<Keyboard>(sequence);   // ten presses, one in each of ten consecutive f
   - the first step is a press and `ShouldNotPressOn` returns `true` for what is under it,
   - all 10 fingers of the touchscreen are in use,
   - the auto tap is not enabled: before `Start`, or after `Stop`.
+- Before `Start` and after `Stop`, `Simulate` returns `null` before it looks at a virtual pointer or device. The
+  exceptions that depend on that device (a touchscreen type or layout, a layout that does not exist, a control that the
+  pointer or the device does not have) come only while the auto tap is started. The ones that depend on the plan alone
+  (a gesture that a finger cannot do, a sequence that writes nothing) and the one for a slot number come at any time.
 - `Simulate` queues every step at the start of the plan that takes no time, not only the first one: the first step, and
   the steps after it, up to the first step that takes time. A step takes time if it is a move or a change over seconds,
   or a `Hold` or `HoldUntil` that has to wait; a `HoldUntil` whose condition is true already takes none, and `Simulate`
@@ -409,17 +431,29 @@ filled in afterwards.
 
 | Field | Meaning |
 |---|---|
-| `Index`, `Kind`, `Device` | the slot (`-1` outside the slots), the kind of operation (`Finger`, `Pointer`, `Device`) and the virtual device that was operated |
+| `Index`, `Kind`, `Device` | the slot (`-1` outside the slots), the kind of operation and the virtual device that was operated. `Kind` is `Finger` for `Simulate(slot, ...)`, `Pointer` for a `Gesture` on a pointer other than a touchscreen, and `Device` for a `ControlSequence` and for `Simulate(Key, ...)` |
 | `FrameCount`, `DateTime`, `ScreenPoint` | what was asked for, when `Simulate` was called. `ScreenPoint` is the position of the first press or hover, and zero for a device without a position |
+| `EndScreenPoint` (`Vector2?`) | where the finger or pointer is put last. Until the operation ends it is where the plan puts it, after that where it was put: `Completed` tells which. `null` while the plan does not tell (the destination of `MoveTo(Func<Vector2>)` is not known before the move starts), and always `null` for a device |
+| `Duration` (`float?`) | how long the operation takes, in seconds. Until the operation ends it is the sum of the seconds of the steps, after that the time it took: `Completed` tells which. `null` while the plan does not tell, as with a `HoldUntil`. Both are counted in the seconds that are passed to `Update(float)` |
+| `CurrentStep` | the step that is being carried out, as an index into `Gesture.Steps` or `ControlSequence.Steps`. It is -1 before the operation starts, and after the operation ended it is the index of the last step |
 | `Order`, `StartedFrameCount` | the number of the change that started the operation and the frame it was processed in. `null` and `0` until then |
 | `DragStartedOrder`, `DragStartedFrameCount`, `Dragged` | the change that moved the pointer beyond the drag threshold, which is when begin-drag is delivered, and whether that happened: `Dragged` |
 | `CompletedOrder`, `CompletedFrameCount`, `Completed`, `EndReason` | the change that ended the operation, and why: `Finished`, `Interrupted` (`Stop`, the Input System reset the device, or it discarded an event of the operation after it had started, such as the release), `TimedOut`, `Dropped` (the Input System discarded the event that would have started it), `Refused`. `CompletedOrder` is `null` when no processed change ended the operation: `Dropped`, ended by `Stop`, or an operation whose end changes no control, such as a hover that presses nothing. |
 | `Target`, `ClickExecuted`, `ClickTarget`, `DragTarget`, `DropTarget` | what the event system is going to do, worked out from the rules of the input module (below) |
-| `Gesture`, `Sequence` | the plan that was passed to `Simulate`: the `Gesture` for a finger or a pointer, the `ControlSequence` for a device |
+| `Gesture`, `Sequence` | the plan that was passed to `Simulate`: the `Gesture` for a finger or a pointer, the `ControlSequence` for a device. Its steps can be read (below) |
 
-A `LogItem` has no field for where a drag ends or for how long an operation takes. Both are part of the plan that you
-passed to `Simulate`, which `Gesture` or `Sequence` refers to. The steps of a plan cannot be read from outside the
-package, so keep the values yourself if you need them later.
+A `LogItem` is changed in place while the operation proceeds. The `LogEvent`s that `GetLatestLogs()` returns for one item
+(`Started`, `DragStarted`, `Completed`) all refer to the same `LogItem`, so reading it gives its state now, not its state
+at the time of the event. To know a value at the time of an event, read it in the frame of that event or make a copy of it.
+
+Some fields hold the value that is known now. `Target` and `DragTarget` are a prediction that is made when `Simulate` is
+called and worked out again when the press is processed. `EndScreenPoint` and `Duration` are the planned value until the
+operation ends, and the actual value after that.
+
+The plan can be read. `Gesture.Steps` and `ControlSequence.Steps` are read-only lists (`IReadOnlyList`) of the steps, in
+the order they run. A step is a read-only struct with a kind (an enum) and its values: a position, a number of seconds,
+a button, the path of a control, a value, a condition. The step of `MoveTo(Func<Vector2>)` or `HoldUntil(Func<bool>)`
+holds that delegate. `CurrentStep` is an index into these lists. Do not modify a plan after it was passed to `Simulate`.
 
 An item that `Simulate` returned ends exactly once.
 
@@ -437,10 +471,20 @@ pointer dragged is `Dragged`, which is `true` once the pointer moved beyond the 
 the change that did it. `DropTarget` is the other way round: no drop is delivered for a pointer that did not drag, so it
 stays `null` unless `Dragged` is `true`.
 
+`LogItem.ToString` shows the kind, the slot, the frame, the duration, the time, the position of the press, the end
+position and the object that gets the press. What is `null` is left out: an item with no `Duration` has no `Duration:`,
+and one with no end position has no `→`. `GameObject: (none)` means that there is no `Target`. The steps are not shown.
+For a device, the second line is `Device:` and its name.
+
+```
+Finger Index: 0 FrameCount: 123, Duration: 0.10, DateTime: 11/04/2026 12:00:00
+ScreenPoint: (100.0, 200.0) → (300.0, 400.0) GameObject: Button
+```
+
 ### `GetLatestLogs()`
 
 `GetLatestLogs()` is the one place to read what happened. It returns the sequence of what happened in the latest Dynamic
-input update, in the order the Input System processed it.
+input update, in the order the Input System processed it. The sequence is empty if nothing happened in that update.
 
 ```csharp
 foreach (var e in GetLatestLogs())
@@ -451,11 +495,18 @@ foreach (var e in GetLatestLogs())
 }
 ```
 
-- The sequence is renewed at the start of every Dynamic input update, not at the start of `Update(float)`. An operation
+- The return value is a struct that holds the sequence, made like `List<T>.Enumerator`. A `foreach` over it allocates
+  nothing, and it has `Count` and an indexer. It also implements `IEnumerable<LogEvent>`, so that LINQ works; that path
+  allocates.
+- The sequence is valid until the next Dynamic input update. After the sequence was rebuilt, enumerating it or reading
+  an element by its index throws `InvalidOperationException`. To use the elements later, make a copy (for example with
+  `ToArray()`).
+- The sequence is rebuilt at the start of every Dynamic input update, not at the start of `Update(float)`. An operation
   simulated in frame N is in the sequence of frame N + 1, and can be read in `OnPreUpdate`, `Update(int)`,
   `OnPostUpdate` and after `Update(float)` of that frame.
-- A frame in which no Dynamic input update ran has an empty sequence. A sequence of an earlier frame is never returned, for
-  example after the virtual input was removed.
+- The auto tap listens to the input updates from its construction until `Dispose`, whether or not it is started. So the
+  sequence is always the one of the latest update, also before `Start`, after `Stop` and after the virtual input was
+  removed: it is rebuilt then, and empty if nothing happened. Dispose an auto tap that was never started, too.
 - When several things happened to one item in one input update, they are several elements.
 - Elements are ordered by `Order`. The elements without a number come after the others, in the order the items were
   simulated. They are the `Completed` of
@@ -638,9 +689,9 @@ public class RandomTap : AutoTapBase
 }
 ```
 
-The slots exist from the constructor, so `Update` and `Simulate` work without `SetupMarkers`. The constructor throws
-`ArgumentOutOfRangeException` for a number outside 1 to 10. `ScenarioBasedAutoTap` takes the number of slots in its
-constructor too.
+The slots exist from the constructor, so `Start`, `Update` and `Simulate` work without `SetupMarkers`. The constructor
+throws `ArgumentOutOfRangeException` for a number outside 1 to 10. `ScenarioBasedAutoTap` takes the number of slots in
+its constructor too.
 
 **Removed**
 
@@ -649,9 +700,9 @@ constructor too.
 - `FirePointer`, `FireDevice`, `FireMouse`, `FirePen`, `FireScroll` and `FireGamepad`. `FireKey` is the only one that has
   a shortcut left, `Simulate(Key, ...)`.
 - `AutoTapBase.Setup` and `AutoTapBase.SetupInternal`.
-- `LogItem.DragTo` and `LogItem.Duration`. Where a drag ends and how long an operation takes are part of the plan that
-  you passed, which `LogItem.Gesture` or `LogItem.Sequence` refers to. The steps of a plan cannot be read, so keep the
-  values yourself if you need them later.
+- `LogItem.DragTo` and `LogItem.Duration`. `DragTo` was the destination of the move, and `Duration` a `float`: the
+  seconds given to `Fire`, `NaN` for a gesture or a sequence. `LogItem.EndScreenPoint` and `LogItem.Duration` are in their
+  place, but they mean something else (see **Added**).
 - `LogItemKind.Tap`, `LogItemKind.Drag` and `LogItemKind.Gesture`. The kinds are `Finger`, `Pointer` and `Device`.
 
 **Changed**
@@ -660,6 +711,24 @@ constructor too.
   pressed with `Simulate(slot, gesture)`.
 - `Scenario.TryTap` stays. It works out the point from a `RectTransform` and judges whether the press reaches `target`;
   it calls `Simulate(index, Gesture.PressAt(point).Hold(duration))`.
+- `GetLatestLogs()` returns a struct that holds the sequence, not an `IEnumerable<LogEvent>`. It is still the sequence of
+  what happened in the latest Dynamic input update, and a `foreach` over it works as before, but it allocates nothing
+  now. The sequence is valid only until the next Dynamic input update: after that, enumerating it or reading an element
+  by its index throws `InvalidOperationException`. In 2.0.0 the result was a copy that stayed valid, so make a copy of
+  the elements now if you keep them for later (for example with `ToArray()`). The sequence is rebuilt in every Dynamic
+  input update from the construction of the auto tap until `Dispose`, and is empty if nothing happened in it.
+- `LogItem.ToString` starts with the kind (`Finger`, `Pointer` or `Device`). It shows `EndScreenPoint` after
+  `ScreenPoint`, where 2.0.0 showed `DragTo`, and it shows `Duration`. It leaves out what is `null`.
+
+**Added**
+
+- `LogItem.EndScreenPoint` (`Vector2?`): where the finger or pointer is put last. `LogItem.Duration` (`float?`): how long
+  the operation takes, in the seconds passed to `Update(float)`. Both are the planned value until the operation ends and
+  the actual value after that (`Completed` tells which), and `null` while the plan does not tell. They are not the
+  members that were removed: `DragTo` was `null` for an operation that does not move, while `EndScreenPoint` is not,
+  and the old `Duration` was the number that you passed to `Fire`.
+- `Gesture.Steps` and `ControlSequence.Steps`: the plan as a read-only list of steps. `LogItem.CurrentStep`: the index
+  of the step that is being carried out.
 
 What to write instead:
 
@@ -721,12 +790,17 @@ some things that were true in v1 are not true any more.
 
 **Log**
 - `GetLatestLogs()` returns what happened in the latest input update, in processing order (`Started`, `DragStarted`,
-  `Completed`), as a sequence of `LogEvent`; v1 returned the `LogItem`s of the slots that were active. A frame without an
-  input update has an empty sequence. The ends of items that were dropped, that `Stop` ended, or that changed nothing at
-  their end come last, without a number. `GetLatestCompletedLogs()` is removed.
-- `LogItem` has other fields and a different `ToString`. `DragTo` and `Duration` of v1 are not fields any more; both are
-  part of the plan that you passed, which `LogItem.Gesture` refers to. `ClickExecuted` and `ClickTarget` are
-  predictions.
+  `Completed`), as a sequence of `LogEvent`; v1 returned the `LogItem`s of the slots that were active. The sequence is
+  empty if nothing happened in that update. It is a struct that allocates nothing in a `foreach`, and it is valid until
+  the next Dynamic input update (see [`GetLatestLogs()`](#getlatestlogs)). The ends of items that were dropped, that
+  `Stop` ended, or that changed nothing at their end come last, without a number. `GetLatestCompletedLogs()` is removed.
+- `LogItem` has other fields. `DragTo` of v1 is `EndScreenPoint` now, and `Duration` is a `float?`. Both are the planned
+  value until the operation ends and the actual value after that, and `null` while the plan does not tell.
+  `EndScreenPoint` is where the finger or pointer is put last, so an operation that does not move has one too, which
+  `DragTo` did not. The plan can be read with `LogItem.Gesture` and `LogItem.Sequence`, and `LogItem.CurrentStep` is the
+  step that is being carried out. `ClickExecuted` and `ClickTarget` are predictions.
+- `LogItem.ToString` is close to the one of v1. It starts with the kind (`Finger`, `Pointer` or `Device`) where v1
+  started with `Tap` or `Drag`, and it leaves out what is `null`.
 - Pointer ids are the ones of the Input System: `(deviceId << 24) + touchId` for a finger and the device id for a mouse or a
   pen.
 
