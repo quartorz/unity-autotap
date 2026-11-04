@@ -10,9 +10,8 @@ namespace Sample
 {
 	public partial class ScenarioBasedAutoTap : Base
 	{
-		public override void Setup(Canvas canvasForMarker, Sprite markerSprite)
+		public ScenarioBasedAutoTap() : base(5)
 		{
-			SetupInternal(canvasForMarker, markerSprite, 5);
 		}
 
 		protected override void OnStart()

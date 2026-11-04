@@ -27,7 +27,7 @@ namespace UnityAutoTap.Tests
 			base.Setup();
 			_scene = new TestScene();
 			_autoTap = new TestAutoTap();
-			_autoTap.Setup(_scene.Canvas, null);
+			_autoTap.SetupMarkers(_scene.Canvas, null);
 			_autoTap.Start();
 			_reader = new InputChangeReader();
 			_changes = new List<InputChange>();
@@ -442,17 +442,100 @@ namespace UnityAutoTap.Tests
 
 			using (var other = new TestAutoTap())
 			{
-				other.Setup(null, null);
 				Assert.Throws<InvalidOperationException>(() => other.Start());
 				Assert.Throws<InvalidOperationException>(() => other.Stop());
 			}
 
 			_autoTap.Stop();
 			Assert.Throws<InvalidOperationException>(() => _autoTap.Stop());
-			using (var unprepared = new TestAutoTap())
+			var disposed = new TestAutoTap();
+			disposed.Dispose();
+			Assert.Throws<ObjectDisposedException>(() => disposed.Start());
+			Assert.Throws<ObjectDisposedException>(() => disposed.Tap(0, TestScene.At(0.2f, 0.2f), 0f));
+			Assert.Throws<ObjectDisposedException>(() => disposed.SetupMarkers(null, null));
+		}
+
+		[Test]
+		public void TheNumberOfSlotsIsGivenToTheConstructorAndHasToBeFromOneToTen()
+		{
+			Assert.Throws<ArgumentOutOfRangeException>(() => new TestAutoTap(0));
+			Assert.Throws<ArgumentOutOfRangeException>(() => new TestAutoTap(-1));
+			Assert.Throws<ArgumentOutOfRangeException>(() => new TestAutoTap(11));
+			Assert.Throws<ArgumentOutOfRangeException>(() => new TestAutoTap(null, 0));
+			Assert.Throws<ArgumentOutOfRangeException>(() => new TestAutoTap(null, 11));
+			_autoTap.Dispose();
+			foreach (var count in new[] { 1, 10 })
 			{
-				Assert.Throws<InvalidOperationException>(() => unprepared.Start());
+				using (var other = new TestAutoTap(count))
+				{
+					other.Start();
+					for (var i = 0; i < count; ++i)
+					{
+						Assert.That(other.Tap(i, TestScene.At(0.05f + 0.09f * i, 0.2f), 1f), Is.Not.Null, $"slot {i} of {count}");
+					}
+
+					Assert.Throws<ArgumentOutOfRangeException>(() => other.Tap(count, TestScene.At(0.5f, 0.5f), 1f));
+					Assert.Throws<ArgumentOutOfRangeException>(() => other.Tap(-1, TestScene.At(0.5f, 0.5f), 1f));
+				}
+
+				InputSystem.Update(); // the releases of the fingers that Dispose queued
 			}
+
+			using (var session = VirtualInput.Acquire())
+			{
+				Assert.Throws<ArgumentOutOfRangeException>(() => new TestAutoTap(session, 0));
+				Assert.That(session.NewFinger(), Is.Not.Null, "the session of the caller is still usable");
+			}
+		}
+
+		[Test]
+		public void TheSlotsAreThereBeforeSetupMarkersAndWithoutIt()
+		{
+			_autoTap.Dispose();
+			var calls = new List<int>();
+			_autoTap = new TestAutoTap(4);
+			_autoTap.OnEmptySlot = calls.Add;
+			_autoTap.Start();
+			var p = TestScene.At(0.2f, 0.2f);
+
+			var tap = _autoTap.Tap(0, p, 0f);
+			var hover = _autoTap.Mouse(Gesture.HoverAt(p));
+			var key = _autoTap.Key(Key.A);
+			for (var i = 0; i < 20 && !(tap.Completed && hover.Completed && key.Completed); ++i)
+			{
+				Frame();
+			}
+
+			Assert.That(new[] { tap, hover, key }.Select(i => i.EndReason), Is.All.EqualTo(AutoTapBase.EndReason.Finished));
+			Assert.That(new[] { tap, hover, key }.Select(i => i.Completed), Is.All.True);
+			Assert.That(calls.Distinct().OrderBy(i => i), Is.EqualTo(new[] { 0, 1, 2, 3 }), "every slot is visited");
+			Assert.That(_scene.Canvas.transform.childCount, Is.Zero, "nothing shows a marker");
+		}
+
+		[Test]
+		public void SetupMarkersMakesAMarkerForEachSlotAndReplacesTheEarlierOnes()
+		{
+			List<Transform> Markers() => _scene.Canvas.transform.Cast<Transform>().Where(t => t.name.StartsWith("Marker ")).ToList();
+
+			Assert.That(Markers().Select(t => t.name), Is.EqualTo(new[] { "Marker 1", "Marker 2", "Marker 3" }));
+
+			_autoTap.SetupMarkers(_scene.Canvas, null);
+
+			Assert.That(Markers(), Has.Count.EqualTo(3), "replaced, not added");
+
+			_autoTap.SetupMarkers(null, null);
+
+			Assert.That(Markers(), Is.Empty);
+
+			var item = _autoTap.Tap(0, TestScene.At(0.2f, 0.2f), 1f);
+			Frame();
+			Assert.That(item, Is.Not.Null, "slots work without markers");
+
+			_autoTap.SetupMarkers(_scene.Canvas, null);
+			Assert.That(Markers(), Has.Count.EqualTo(3));
+			Frame();
+
+			Assert.That(_scene.Canvas.transform.Find("Marker 1").gameObject.activeSelf, Is.True, "the operation that is running is shown by the new marker");
 		}
 
 		[Test]
@@ -474,7 +557,6 @@ namespace UnityAutoTap.Tests
 			using (var session = VirtualInput.Acquire())
 			{
 				var other = new TestAutoTap(session);
-				other.Setup(null, null);
 				other.Start();
 				other.Tap(0, TestScene.At(0.2f, 0.2f), 0f);
 				other.Stop();
@@ -493,8 +575,6 @@ namespace UnityAutoTap.Tests
 			InputSystem.settings.updateMode = InputSettings.UpdateMode.ProcessEventsInFixedUpdate;
 			using (var other = new TestAutoTap())
 			{
-				other.Setup(null, null);
-
 				Assert.Throws<InvalidOperationException>(() => other.Start());
 
 				Assert.That(AutoTapBase.Current, Is.Null);

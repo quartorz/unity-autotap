@@ -14,20 +14,18 @@ namespace UnityAutoTap.Tests
 	/// </summary>
 	sealed class TestAutoTap : AutoTapBase
 	{
-		public int SlotCount = 3;
 		public readonly List<KeyValuePair<int, LogItem>> Completed = new List<KeyValuePair<int, LogItem>>();
 		public readonly List<string> Calls = new List<string>();
 		public Func<RaycastResult, bool> Refuse;
 		public Action<int> OnEmptySlot;
 		public Action<int, LogItem> OnCompletedHook;
 
-		public TestAutoTap(IVirtualInput input = null) : base(input)
+		public TestAutoTap(IVirtualInput input = null, int slotCount = 3) : base(slotCount, input)
 		{
 		}
 
-		public override void Setup(Canvas canvasForMarker, Sprite markerSprite)
+		public TestAutoTap(int slotCount) : base(slotCount)
 		{
-			SetupInternal(canvasForMarker, markerSprite, SlotCount);
 		}
 
 		public LogItem Tap(int index, Vector2 position, float duration)

@@ -5,9 +5,8 @@ namespace Sample
 {
 	public class RandomTap : AutoTap
 	{
-		public override void Setup(Canvas canvasForMarker, Sprite markerSprite)
+		public RandomTap() : base(5)
 		{
-			SetupInternal(canvasForMarker, markerSprite, 5);
 		}
 
 		protected override void Update(int index)

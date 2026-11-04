@@ -34,14 +34,18 @@ namespace UnityAutoTap
 	/// </para>
 	/// <list type="bullet">
 	/// <item><description>
-	/// Slots. Slot <c>i</c> holds at most one finger at a time, started with <c>Fire(i, ...)</c>. The number of
-	/// slots is the tap count passed to <see cref="SetupInternal"/>, and at most 10 fingers exist in total.
+	/// Slots. Slot <c>i</c> holds at most one finger at a time, started with <c>Fire(i, ...)</c>. The
+	/// number of slots is given to the constructor, from 1 to 10, the number of touches that a touchscreen has.
 	/// </description></item>
 	/// <item><description>
 	/// Operations outside the slots, started with <see cref="FirePointer"/>, <see cref="FireDevice"/> and their
 	/// shortcuts. Each virtual device holds at most one at a time.
 	/// </description></item>
 	/// </list>
+	/// <para>
+	/// The markers that show where the operations are on the screen are optional: <see cref="Update(float)"/> and
+	/// <c>Fire</c> work without <see cref="SetupMarkers"/>.
+	/// </para>
 	/// </remarks>
 	public abstract partial class AutoTapBase : IDisposable
 	{
@@ -123,9 +127,14 @@ namespace UnityAutoTap
 		/// Creates an auto tap that uses <see cref="VirtualInput"/>: the virtual devices are acquired by
 		/// <see cref="Start"/> and given up by <see cref="Stop"/>.
 		/// </summary>
-		protected AutoTapBase()
+		/// <param name="slotCount">
+		/// The number of slots, from 1 to 10, the number of touches that a touchscreen has.
+		/// </param>
+		/// <exception cref="ArgumentOutOfRangeException"><paramref name="slotCount"/> is not between 1 and 10.</exception>
+		protected AutoTapBase(int slotCount)
 		{
 			_ownsInput = true;
+			CreateSlots(slotCount);
 		}
 
 		/// <summary>
@@ -133,45 +142,58 @@ namespace UnityAutoTap
 		/// with this auto tap. The caller owns <paramref name="input"/>: this class never disposes it, and
 		/// <see cref="Start"/> does not acquire another session.
 		/// </summary>
+		/// <param name="slotCount">
+		/// The number of slots, from 1 to 10, the number of touches that a touchscreen has.
+		/// </param>
 		/// <param name="input">
 		/// The session that supplies the virtual devices, as returned by <see cref="VirtualInput.Acquire"/>.
 		/// <c>null</c> makes the auto tap acquire its own session, as the other constructor does.
 		/// </param>
-		protected AutoTapBase(IVirtualInput input)
+		/// <exception cref="ArgumentOutOfRangeException"><paramref name="slotCount"/> is not between 1 and 10.</exception>
+		protected AutoTapBase(int slotCount, IVirtualInput input)
 		{
 			_ownsInput = input == null;
 			_input = input;
+			CreateSlots(slotCount);
+		}
+
+		void CreateSlots(int slotCount)
+		{
+			if (slotCount < 1 || slotCount > VirtualInputCore.MaxFingers)
+			{
+				throw new ArgumentOutOfRangeException(
+					nameof(slotCount), $"The slot count must be between 1 and {VirtualInputCore.MaxFingers}.");
+			}
+
+			_slots = new FingerOperation[slotCount];
 		}
 
 		/// <summary>
-		/// Prepares the slots and their markers.
+		/// Creates the markers that show where the operations are: one for each slot, and one for each pointer that
+		/// is operated. Without markers nothing is shown, and everything else works as it does with them.
 		/// </summary>
-		/// <param name="canvasForMarker">The canvas that shows the markers of the operations.</param>
-		/// <param name="markerSprite">The sprite of a marker.</param>
-		/// <param name="tapCount">
-		/// The number of slots, from 1 to 10, the number of touches that a touchscreen has.
+		/// <remarks>
+		/// It can be called at any time, also while running. Calling it again replaces the markers that were made by
+		/// the earlier call.
+		/// </remarks>
+		/// <param name="canvasForMarker">
+		/// The canvas that shows the markers of the operations. <c>null</c> shows no marker.
 		/// </param>
-		protected virtual void SetupInternal(
-			Canvas canvasForMarker, Sprite markerSprite, int tapCount)
+		/// <param name="markerSprite">The sprite of a marker.</param>
+		/// <exception cref="ObjectDisposedException">This instance was disposed.</exception>
+		public void SetupMarkers(Canvas canvasForMarker, Sprite markerSprite)
 		{
-			if (tapCount < 1 || tapCount > VirtualInputCore.MaxFingers)
-			{
-				throw new ArgumentOutOfRangeException(
-					nameof(tapCount), $"The tap count must be between 1 and {VirtualInputCore.MaxFingers}.");
-			}
-
+			ThrowIfDisposed();
 			DestroyMarkers();
-			Enabled = false;
 			_canvas = canvasForMarker;
 			_markerSprite = markerSprite;
-			_slots = new FingerOperation[tapCount];
-			_markers = new Image[tapCount];
+			_markers = new Image[_slots.Length];
 			if (canvasForMarker == null)
 			{
 				return;
 			}
 
-			for (var i = 0; i < tapCount; ++i)
+			for (var i = 0; i < _slots.Length; ++i)
 			{
 				var markerGameObject = new GameObject($"Marker {i + 1}");
 				markerGameObject.transform.SetParent(canvasForMarker.transform, false);
@@ -186,12 +208,13 @@ namespace UnityAutoTap
 			}
 		}
 
-		/// <remarks>
-		/// needs to call <see cref="SetupInternal"/>.
-		/// </remarks>
-		/// <param name="canvasForMarker">canvas to show tap markers</param>
-		/// <param name="markerSprite">sprite for tap marker</param>
-		public abstract void Setup(Canvas canvasForMarker, Sprite markerSprite);
+		void ThrowIfDisposed()
+		{
+			if (_slots == null)
+			{
+				throw new ObjectDisposedException(GetType().Name);
+			}
+		}
 
 		/// <summary>
 		/// Calls <see cref="Stop"/> if this instance is started, and releases what it holds.
@@ -225,6 +248,7 @@ namespace UnityAutoTap
 		/// nothing.
 		/// </summary>
 		/// <exception cref="InvalidOperationException">Another instance is the current one.</exception>
+		/// <exception cref="ObjectDisposedException">This instance was disposed.</exception>
 		public void Start()
 		{
 			if (Current != null)
@@ -237,11 +261,7 @@ namespace UnityAutoTap
 				throw new InvalidOperationException("Another instance is started.");
 			}
 
-			if (_slots == null)
-			{
-				throw new InvalidOperationException("Setup has to be called before Start.");
-			}
-
+			ThrowIfDisposed();
 			if (_ownsInput)
 			{
 				// Throws if the Input System cannot be driven by virtual input; nothing was changed yet.

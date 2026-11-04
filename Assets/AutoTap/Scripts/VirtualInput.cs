@@ -85,7 +85,7 @@ namespace UnityAutoTap
 	/// <para>
 	/// It is a way to share one session. <see cref="VirtualInputSession"/> is the only implementation, because the
 	/// virtual fingers, pointers and devices that its members return can only be created by a session. Pass the
-	/// session that <see cref="VirtualInput.Acquire"/> returned to <see cref="AutoTapBase(IVirtualInput)"/> so that
+	/// session that <see cref="VirtualInput.Acquire"/> returned to <see cref="AutoTapBase(int, IVirtualInput)"/> so that
 	/// an auto tap and any other user of the same virtual devices, such as a replay, work on the same devices and
 	/// read the same <see cref="Reader"/>. The caller that acquired the session disposes it.
 	/// </para>

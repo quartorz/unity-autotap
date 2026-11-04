@@ -4,6 +4,10 @@ namespace Sample
 {
 	public abstract class AutoTap : AutoTapBase
 	{
+		protected AutoTap(int slotCount) : base(slotCount)
+		{
+		}
+
 		new class LogItem : AutoTapBase.LogItem
 		{
 		}

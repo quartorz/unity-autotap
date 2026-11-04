@@ -132,10 +132,7 @@ namespace UnityAutoTap
 		/// </exception>
 		protected internal LogItem FirePointer(string layout, Gesture gesture, int number = 0)
 		{
-			if (_slots == null)
-			{
-				throw new InvalidOperationException("Setup has to be called before Fire.");
-			}
+			ThrowIfDisposed();
 
 			if (gesture == null)
 			{
@@ -326,10 +323,7 @@ namespace UnityAutoTap
 
 		LogItem FireDeviceSequence(string layout, ControlSequence sequence, int number, float duration)
 		{
-			if (_slots == null)
-			{
-				throw new InvalidOperationException("Setup has to be called before Fire.");
-			}
+			ThrowIfDisposed();
 
 			if (sequence == null)
 			{
@@ -405,10 +399,7 @@ namespace UnityAutoTap
 
 		LogItem FireFinger(int index, Gesture gesture, LogItemKind kind, float duration)
 		{
-			if (_slots == null)
-			{
-				throw new InvalidOperationException("Setup has to be called before Fire.");
-			}
+			ThrowIfDisposed();
 
 			if (index < 0 || index >= _slots.Length)
 			{

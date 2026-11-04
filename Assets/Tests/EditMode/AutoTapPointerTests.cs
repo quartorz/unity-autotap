@@ -31,7 +31,7 @@ namespace UnityAutoTap.Tests
 			base.Setup();
 			_scene = new TestScene(withInputModule: true);
 			_autoTap = new TestAutoTap();
-			_autoTap.Setup(_scene.Canvas, null);
+			_autoTap.SetupMarkers(_scene.Canvas, null);
 			_autoTap.Start();
 			_reader = new InputChangeReader();
 			_changes = new List<InputChange>();

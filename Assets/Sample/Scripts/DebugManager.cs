@@ -55,7 +55,7 @@ namespace Sample
 		{
 			StopCurrentAutoTap();
 			_autoTapBase = new RandomTap();
-			_autoTapBase.Setup(mainCanvas, _marker);
+			_autoTapBase.SetupMarkers(mainCanvas, _marker);
 			_autoTapBase.Start();
 		}
 
@@ -66,7 +66,7 @@ namespace Sample
 			var autoTap = new ScenarioBasedAutoTap();
 			_autoTapBase = autoTap;
 
-			autoTap.Setup(mainCanvas, _marker);
+			autoTap.SetupMarkers(mainCanvas, _marker);
 			autoTap.Scenario = new Group(autoTap, new Repeat {Count = 5}, new[]
 			{
 				new Relogin.Config().Generate(autoTap),
@@ -91,7 +91,7 @@ namespace Sample
 
 			var repeat = new Repeat {Count = 100};
 
-			autoTap.Setup(mainCanvas, _marker);
+			autoTap.SetupMarkers(mainCanvas, _marker);
 			autoTap.Scenario = new Group(autoTap, new Once(), new[]
 			{
 				new Relogin.Config().Generate(autoTap),
@@ -120,7 +120,7 @@ namespace Sample
 			var autoTap = new ScenarioBasedAutoTap();
 			_autoTapBase = autoTap;
 
-			autoTap.Setup(mainCanvas, _marker);
+			autoTap.SetupMarkers(mainCanvas, _marker);
 			autoTap.SetJson(json);
 			autoTap.Start();
 		}

@@ -20,8 +20,6 @@ namespace UnityAutoTap.Tests
 	/// </summary>
 	public sealed class TestAutoTap : AutoTapBase
 	{
-		readonly int _slotCount;
-
 		/// <summary>
 		/// Run once, at the start of the next <see cref="AutoTapBase.Update(float)"/>, which is where scenarios fire.
 		/// </summary>
@@ -67,23 +65,15 @@ namespace UnityAutoTap.Tests
 		/// <summary>
 		/// Creates an auto tap that acquires the virtual input itself at <see cref="AutoTapBase.Start"/>.
 		/// </summary>
-		public TestAutoTap(int slotCount = 4)
+		public TestAutoTap(int slotCount = 4) : base(slotCount)
 		{
-			_slotCount = slotCount;
 		}
 
 		/// <summary>
 		/// Creates an auto tap that operates the devices of <paramref name="input"/>, which the caller owns.
 		/// </summary>
-		public TestAutoTap(IVirtualInput input, int slotCount = 4) : base(input)
+		public TestAutoTap(IVirtualInput input, int slotCount = 4) : base(slotCount, input)
 		{
-			_slotCount = slotCount;
-		}
-
-		/// <inheritdoc/>
-		public override void Setup(Canvas canvasForMarker, Sprite markerSprite)
-		{
-			SetupInternal(canvasForMarker, markerSprite, _slotCount);
 		}
 
 		/// <inheritdoc/>

@@ -183,7 +183,7 @@ namespace UnityAutoTap.Tests
 				Auto = new TestAutoTap(slotCount);
 			}
 
-			Auto.Setup(Rig.Canvas, Rig.MarkerSprite);
+			Auto.SetupMarkers(Rig.Canvas, Rig.MarkerSprite);
 			Auto.Start();
 			return Auto;
 		}
