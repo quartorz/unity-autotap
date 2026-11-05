@@ -634,6 +634,14 @@ for a button, refreshed at the end of each input update that processed an event 
 right and middle buttons of a mouse have a prediction; for any other button it is empty. A `VirtualFinger` has a
 `Prediction` too, and `FingerState`, `PressedFrame` and `ReleasedFrame`. A finger is used for one press only.
 
+`PointerPredictor` works these predictions out, and can be used on its own for the pointer of any other device, a real
+one for example. Tell it what happened to the pointer in each input update, at the end of the update and before the
+event system handles the frame: `Process(position, pressed, released, ...)` for an update in which the pointer was
+pressed or released, or changed while it was pressed, and `NotePosition(position)` for an update in which it only moved
+while it was not pressed. `Prediction` then tells which object receives the press, whether the press became a drag
+(`Dragging`), and what receives the click or the drop. `IsBeyondDragThreshold(position)` tells whether a move would start
+a drag.
+
 `VirtualInput.IsVirtual(device)` tells a virtual device from a real one. `AutoTapBase` also has a constructor that takes
 the number of slots and an `IVirtualInput` (`AutoTapBase(int slotCount, IVirtualInput input)`), so that a session can be
 shared with it; the caller disposes the session then.

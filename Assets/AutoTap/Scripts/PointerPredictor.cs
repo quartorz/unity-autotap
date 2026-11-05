@@ -49,16 +49,45 @@ namespace UnityAutoTap
 
 	/// <summary>
 	/// Works out what <see cref="UnityEngine.InputSystem.UI.InputSystemUIInputModule"/> is going to do for one
-	/// pointer, following the rules of the module without calling any handler.
+	/// pointer, following the rules of the module without calling any handler: which object receives the press,
+	/// whether the press becomes a drag, and whether the release is a click or a drop. The result is
+	/// <see cref="Prediction"/>.
 	/// </summary>
 	/// <remarks>
+	/// <para>
+	/// The virtual fingers and pointers predict with this class (<see cref="VirtualFinger.Prediction"/>,
+	/// <see cref="VirtualPointer.GetPrediction"/>). It predicts for the pointer of any other device as well, a real one
+	/// whose changes an <see cref="InputChangeReader"/> reports for example, when it is told what happened to the
+	/// pointer in each input update:
+	/// </para>
+	/// <list type="bullet">
+	/// <item><description>
+	/// For an input update in which the pointer was pressed or released, or changed while it was pressed
+	/// (<see cref="Active"/>), call <see cref="Process"/> once, with the position at the end of the update.
+	/// </description></item>
+	/// <item><description>
+	/// For an input update in which the pointer only moved while it was not pressed, call <see cref="NotePosition"/>
+	/// instead.
+	/// </description></item>
+	/// <item><description>
+	/// Call them at the end of the input update, before the event system handles the frame. <see cref="Process"/>
+	/// raycasts with <see cref="EventSystem.current"/> when it is called, and the input module raycasts when it handles
+	/// the frame, so the two find the same objects only if the UI does not change in between.
+	/// </description></item>
+	/// </list>
 	/// <para>
 	/// The module handles a pointer once per frame, at the last position of the frame: the press happens at that
 	/// position, a press and a release in the same frame are handled in this order, and a release is handled before
 	/// the drag of the same frame. <see cref="Process"/> takes the input of one input update at once for that reason.
 	/// </para>
+	/// <para>
+	/// The module lets the object that receives the drag switch the drag threshold off
+	/// (<see cref="IInitializePotentialDragHandler"/>). No handler is called here, so the threshold is taken as switched
+	/// off only for an active and enabled <see cref="Slider"/> or <see cref="Scrollbar"/>, the components of uGUI that
+	/// switch it off.
+	/// </para>
 	/// </remarks>
-	internal sealed class PointerPredictor
+	public sealed class PointerPredictor
 	{
 		static readonly List<RaycastResult> s_Results = new List<RaycastResult>();
 		static PointerEventData s_Scratch;
@@ -75,6 +104,10 @@ namespace UnityAutoTap
 		GameObject _pointerClick;
 		GameObject _pointerDrag;
 
+		/// <summary>
+		/// What the input module is going to do for the pointer, as worked out by the latest <see cref="Process"/>.
+		/// It is always the same instance, which <see cref="Process"/> fills in.
+		/// </summary>
 		public PointerPrediction Prediction { get; } = new PointerPrediction();
 
 		/// <summary>
@@ -87,7 +120,7 @@ namespace UnityAutoTap
 		/// not held. The input module compares the position of a frame with the position of the frame before, so
 		/// every update that moved the pointer has to be noted.
 		/// </summary>
-		/// <param name="position">The position at the end of the update.</param>
+		/// <param name="position">The position at the end of the update, in screen pixels.</param>
 		public void NotePosition(Vector2 position)
 		{
 			_previousPosition = position;
@@ -97,7 +130,7 @@ namespace UnityAutoTap
 		/// <summary>
 		/// Finds what is under <paramref name="position"/> in the same way as the input module does.
 		/// </summary>
-		public static PressProbe Probe(Vector2 position)
+		internal static PressProbe Probe(Vector2 position)
 		{
 			var eventSystem = EventSystem.current;
 			if (eventSystem == null)
@@ -143,6 +176,12 @@ namespace UnityAutoTap
 		/// <summary>
 		/// Tells whether a move to <paramref name="position"/> would start a drag.
 		/// </summary>
+		/// <param name="position">The position to move to, in screen pixels.</param>
+		/// <returns>
+		/// <c>true</c> if the pointer is pressed (<see cref="Active"/>) and not dragging yet, something receives the
+		/// drag (<see cref="PointerPrediction.PointerDrag"/>), and the move from where the pointer was pressed reaches
+		/// <see cref="EventSystem.pixelDragThreshold"/> or the threshold is switched off.
+		/// </returns>
 		public bool IsBeyondDragThreshold(Vector2 position)
 		{
 			if (!_active || _pointerDrag == null || _dragging)
@@ -154,15 +193,36 @@ namespace UnityAutoTap
 		}
 
 		/// <summary>
-		/// Handles what happened to the pointer in one input update.
+		/// Handles what happened to the pointer in one input update, and updates <see cref="Prediction"/>.
 		/// </summary>
-		/// <param name="position">The position at the end of the update.</param>
+		/// <remarks>
+		/// <para>
+		/// A press and a release in the same update are handled in this order. The press is evaluated at
+		/// <paramref name="position"/>: what is under it becomes <see cref="PointerPrediction.PressHits"/>,
+		/// <see cref="PointerPrediction.PointerPress"/>, <see cref="PointerPrediction.PointerClick"/> and
+		/// <see cref="PointerPrediction.PointerDrag"/>. The release sets <see cref="PointerPrediction.ClickTarget"/>
+		/// and <see cref="PointerPrediction.DropTarget"/>. A move while the pointer is pressed on something that
+		/// receives the drag sets <see cref="PointerPrediction.Dragging"/> once it reaches the drag threshold.
+		/// </para>
+		/// <para>
+		/// <paramref name="lastOrder"/>, <paramref name="lastFrame"/>, <paramref name="firstBeyondOrder"/> and
+		/// <paramref name="firstBeyondFrame"/> tell the auto tap at which change the drag started
+		/// (<see cref="AutoTapBase.LogItem.DragStartedOrder"/>). The public members of <see cref="Prediction"/> do not
+		/// depend on them.
+		/// </para>
+		/// </remarks>
+		/// <param name="position">The position at the end of the update, in screen pixels.</param>
 		/// <param name="pressed">The pointer was pressed in the update.</param>
 		/// <param name="released">The pointer was released or canceled in the update.</param>
-		/// <param name="lastOrder">The order of the last change of the pointer in the update.</param>
-		/// <param name="lastFrame">The frame of the last change of the pointer in the update.</param>
+		/// <param name="lastOrder">
+		/// The order of the last change of the pointer in the update, such as <see cref="InputChange.Order"/>.
+		/// </param>
+		/// <param name="lastFrame">
+		/// The frame of the last change of the pointer in the update, such as <see cref="InputChange.Frame"/>.
+		/// </param>
 		/// <param name="firstBeyondOrder">
-		/// The order of the first change of the update that moved the pointer beyond the drag threshold, or -1.
+		/// The order of the first change of the update that moved the pointer beyond the drag threshold
+		/// (<see cref="IsBeyondDragThreshold"/>), or -1.
 		/// </param>
 		/// <param name="firstBeyondFrame">The frame of that change.</param>
 		public void Process(

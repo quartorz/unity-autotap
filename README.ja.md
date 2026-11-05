@@ -459,6 +459,8 @@ keyboard.Queue(ControlValue.Of("leftCtrl", 1f), ControlValue.Of("r", 1f));   // 
 
 デバイスは、キューに入れたものをすべて含む状態の写しを持つので、イベント同士が打ち消し合うことはありません。`VirtualPointer.Position` は、最後にキューに入れた位置です。`VirtualPointer.GetPrediction(button)` はボタンの予測で、そのボタンのイベントを処理した入力更新の終わりに、`IVirtualInput.InputUpdated` が起きる前に更新されます。`Prediction` は主なボタンのものです。予測があるのは、主なボタンと、マウスの右ボタンと中ボタンだけで、ほかのボタンでは空です。`VirtualFinger` にも `Prediction` があり、`FingerState`、`PressedFrame`、`ReleasedFrame` もあります。指は 1 回の押しにだけ使います。
 
+`PointerPredictor` は、これらの予測を立てるクラスで、ほかのデバイス（本物のデバイスなど）の pointer にも単独で使えます。入力更新ごとに、その更新の終わり、イベントシステムがフレームを処理する前に、pointer に起きたことを渡します。押された・離された、または押されている間に変わった更新では `Process(position, pressed, released, ...)` を、押されていない間に動いただけの更新では `NotePosition(position)` を呼びます。そのあとの `Prediction` で、押しを受け取るオブジェクト、押しがドラッグになったか（`Dragging`）、クリックやドロップを受け取るものが分かります。`IsBeyondDragThreshold(position)` は、その位置への移動でドラッグが始まるかを返します。
+
 `VirtualInput.IsVirtual(device)` は、仮想デバイスと本物のデバイスを見分けます。`AutoTapBase` には、スロットの数と `IVirtualInput` を取るコンストラクタ（`AutoTapBase(int slotCount, IVirtualInput input)`）もあり、session を共有できます。その場合、session は呼び出し側が dispose します。
 
 ## 動いている間に起きること
