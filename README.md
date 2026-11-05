@@ -25,7 +25,7 @@ it: pointer ids, enter and exit, long presses, drags, scrolling, navigation with
 
 1. Open the Unity Package Manager.
 2. Select "Add package from git URL".
-3. Enter `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.1.2`.
+3. Enter `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.2.0`.
 4. Add `ENABLE_AUTOTAP` to the Scripting Define Symbols. The whole package is compiled only with this symbol.
 
 To stay on v1, which needs neither the Input System nor virtual devices, end the URL with `#v1.5.2`:

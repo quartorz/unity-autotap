@@ -18,7 +18,7 @@ UI のハンドラーを直接呼ぶことはしません。Input System に仮�
 
 1. Unity Package Manager を開きます。
 2. "Add package from git URL" を選びます。
-3. `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.1.2` を入力します。
+3. `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v2.2.0` を入力します。
 4. Scripting Define Symbols に `ENABLE_AUTOTAP` を足します。パッケージ全体が、このシンボルがあるときだけコンパイルされます。
 
 Input System も仮想デバイスも要らない v1 を使い続けるときは、URL の末尾を `#v1.5.2` にします: `https://github.com/quartorz/unity-autotap.git?path=Assets/AutoTap#v1.5.2`。
