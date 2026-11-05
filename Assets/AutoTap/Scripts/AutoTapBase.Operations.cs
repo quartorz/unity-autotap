@@ -892,6 +892,13 @@ namespace UnityAutoTap
 				return;
 			}
 
+			// The finger was canceled from outside (IVirtualInput.ResetTouchscreen) and cannot be moved or released
+			// any more. The operation ends as interrupted when the cancel is processed, or when it is lost.
+			if (!operation.Finger.CanRelease)
+			{
+				return;
+			}
+
 			operation.Runner.Advance(deltaTime);
 			RefreshItem(operation);
 			ShowMarker(operation.Index, operation.Finger.Position);

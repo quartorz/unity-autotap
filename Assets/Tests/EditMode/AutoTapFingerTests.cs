@@ -408,6 +408,37 @@ namespace UnityAutoTap.Tests
 				Assert.That(_autoTap.Tap(0, TestScene.At(0.5f, 0.5f), 0f), Is.Null);
 			}
 		}
+
+		[Test]
+		public void AnOperationWhoseFingerResetTouchscreenCanceledIsInterrupted()
+		{
+			_autoTap.Dispose();
+			using (var session = VirtualInput.Acquire())
+			using (var shared = new TestAutoTap(session))
+			{
+				shared.Start();
+				var drag = shared.Drag(0, TestScene.At(0.2f, 0.2f), TestScene.At(0.8f, 0.8f), 1f);
+				var tap = shared.Tap(1, TestScene.At(0.5f, 0.5f), 0f);
+				InputSystem.Update();
+				Assert.That(drag.Order, Is.Not.Null);
+				Assert.That(tap.Order, Is.Not.Null);
+
+				session.ResetTouchscreen();
+
+				Assert.DoesNotThrow(() => shared.Update(k_Dt), "the drag would move its finger and the tap would release it");
+				Assert.That(drag.Completed, Is.False);
+				Assert.That(tap.Completed, Is.False);
+
+				InputSystem.Update();
+				shared.Update(k_Dt);
+
+				Assert.That(drag.Completed, Is.True);
+				Assert.That(drag.EndReason, Is.EqualTo(AutoTapBase.EndReason.Interrupted));
+				Assert.That(tap.Completed, Is.True);
+				Assert.That(tap.EndReason, Is.EqualTo(AutoTapBase.EndReason.Interrupted));
+				Assert.That(shared.Completed.Select(c => c.Key), Is.EquivalentTo(new[] { 0, 1 }));
+			}
+		}
 	}
 }
 #endif

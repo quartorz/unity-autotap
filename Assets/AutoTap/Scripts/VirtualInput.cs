@@ -145,6 +145,10 @@ namespace UnityAutoTap
 		/// <see cref="VirtualDevice.ResetToDefault"/> of the other virtual devices, after which the device can be used
 		/// on.
 		/// </para>
+		/// <para>
+		/// An operation of an auto tap (<see cref="AutoTapBase"/>) whose finger is canceled is not carried on: it ends
+		/// with <see cref="AutoTapBase.EndReason.Interrupted"/> at the next input update.
+		/// </para>
 		/// </remarks>
 		void ResetTouchscreen();
 
