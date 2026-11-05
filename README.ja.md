@@ -461,6 +461,8 @@ keyboard.Queue(ControlValue.Of("leftCtrl", 1f), ControlValue.Of("r", 1f));   // 
 
 `PointerPredictor` は、これらの予測を立てるクラスで、ほかのデバイス（本物のデバイスなど）の pointer にも単独で使えます。入力更新ごとに、その更新の終わり、イベントシステムがフレームを処理する前に、pointer に起きたことを渡します。押された・離された、または押されている間に変わった更新では `Process(position, pressed, released, ...)` を、押されていない間に動いただけの更新では `NotePosition(position)` を呼びます。そのあとの `Prediction` で、押しを受け取るオブジェクト、押しがドラッグになったか（`Dragging`）、クリックやドロップを受け取るものが分かります。`IsBeyondDragThreshold(position)` は、その位置への移動でドラッグが始まるかを返します。
 
+デバイスの `ResetToDefault()` は、Input System のソフトリセットが変える control すべてに既定値を、1 つのイベントで書き込みます。そのあともデバイスは続けて使えます。仮想タッチスクリーンは、代わりに `IVirtualInput.ResetTouchscreen()` でリセットします。Input System がタッチスクリーンをリセットするのと同じく、進行中のタッチ（押しをキューに入れただけのものも含む）をすべて取り消します。イベントは指ごとに 1 つです。押している指がなければ何もしません。そのタッチは、本物のタッチスクリーンで取り消されたタッチと同じく終わります。その指の `MoveTo`、`Release` などは `InvalidOperationException` を投げます。もう一度触るには、新しい指で押します。
+
 `VirtualInput.IsVirtual(device)` は、仮想デバイスと本物のデバイスを見分けます。`VirtualInput.TryGetNumber(device, out number)` は、仮想デバイスを追加したときの番号を返します。`GetPointer` と `GetDevice` の `number` で、タッチスクリーンは 0 です。本物のデバイスと、仮想入力がもう持っていない仮想デバイス、前の実行が残した仮想デバイスでは `false` を返します。`AutoTapBase` には、スロットの数と `IVirtualInput` を取るコンストラクタ（`AutoTapBase(int slotCount, IVirtualInput input)`）もあり、session を共有できます。その場合、session は呼び出し側が dispose します。
 
 ## 動いている間に起きること

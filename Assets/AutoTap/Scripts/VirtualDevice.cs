@@ -210,6 +210,13 @@ namespace UnityAutoTap
 		/// Writes the default value into every control that is not marked <c>dontReset</c>, with one event. This is
 		/// the same range as the Input System's soft reset.
 		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// The device can be used on after it: what is queued later is processed after the reset. The virtual
+		/// touchscreen is reset with <see cref="IVirtualInput.ResetTouchscreen"/> instead, which cancels the touches in
+		/// progress, after which their fingers cannot be used any more.
+		/// </para>
+		/// </remarks>
 		public void ResetToDefault()
 		{
 			QueueEvent(Array.Empty<InputControl>(), Array.Empty<object>(), reset: true);

@@ -1,8 +1,10 @@
 #if ENABLE_AUTOTAP
 using System;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 namespace UnityAutoTap.Tests
 {
@@ -360,6 +362,123 @@ namespace UnityAutoTap.Tests
 			InputSystem.Update();
 
 			Assert.That(finger.State, Is.EqualTo(FingerState.Released));
+		}
+
+		/// <summary>
+		/// The phase of the touch of the virtual touchscreen that has the id of <paramref name="finger"/>.
+		/// </summary>
+		static TouchPhase PhaseOf(VirtualFinger finger)
+		{
+			foreach (var touch in Touchscreen.current.touches)
+			{
+				if (touch.touchId.ReadValue() == finger.TouchId)
+				{
+					return touch.phase.ReadValue();
+				}
+			}
+
+			Assert.Fail($"No touch has the id {finger.TouchId}.");
+			return TouchPhase.None;
+		}
+
+		[Test]
+		public void ResetTouchscreenCancelsTheTouchesInProgress()
+		{
+			_session = VirtualInput.Acquire();
+			var changes = new System.Collections.Generic.List<InputChange>();
+			_session.Reader.Changed += changes.Add;
+			var pressed = _session.NewFinger();
+			pressed.Press(new Vector2(10, 20));
+			InputSystem.Update();
+			var queued = _session.NewFinger();
+			queued.Press(new Vector2(30, 40));
+			changes.Clear();
+
+			_session.ResetTouchscreen();
+
+			Assert.That(pressed.State, Is.EqualTo(FingerState.ReleaseQueued));
+			Assert.That(queued.State, Is.EqualTo(FingerState.ReleaseQueued), "a press that is only queued is canceled too");
+			InputSystem.Update();
+			Assert.That(PhaseOf(pressed), Is.EqualTo(TouchPhase.Canceled));
+			Assert.That(PhaseOf(queued), Is.EqualTo(TouchPhase.Canceled));
+			Assert.That(pressed.State, Is.EqualTo(FingerState.Released));
+			Assert.That(queued.State, Is.EqualTo(FingerState.Released));
+			Assert.That(
+				changes.OfType<TouchCanceled>().Select(c => c.TouchId),
+				Is.EquivalentTo(new[] { pressed.TouchId, queued.TouchId }));
+		}
+
+		[Test]
+		public void AFingerThatResetTouchscreenCanceledCannotBeUsed()
+		{
+			_session = VirtualInput.Acquire();
+			var finger = _session.NewFinger();
+			finger.Press(new Vector2(10, 20));
+			InputSystem.Update();
+
+			_session.ResetTouchscreen();
+
+			Assert.Throws<InvalidOperationException>(() => finger.MoveTo(new Vector2(30, 40)), "before the cancel is processed");
+			Assert.Throws<InvalidOperationException>(() => finger.Release());
+			InputSystem.Update();
+			Assert.Throws<InvalidOperationException>(() => finger.MoveTo(new Vector2(30, 40)), "after the cancel is processed");
+			Assert.Throws<InvalidOperationException>(() => finger.Release());
+			Assert.That(PhaseOf(finger), Is.EqualTo(TouchPhase.Canceled));
+		}
+
+		[Test]
+		public void ANewFingerIsUsedAsUsualAfterResetTouchscreen()
+		{
+			_session = VirtualInput.Acquire();
+			var canceled = _session.NewFinger();
+			canceled.Press(new Vector2(10, 20));
+			InputSystem.Update();
+			_session.ResetTouchscreen();
+			InputSystem.Update();
+
+			var finger = _session.NewFinger();
+			finger.Press(new Vector2(30, 40));
+			InputSystem.Update();
+			Assert.That(finger.State, Is.EqualTo(FingerState.Pressed));
+			Assert.That(PhaseOf(finger), Is.EqualTo(TouchPhase.Began));
+
+			finger.MoveTo(new Vector2(50, 60));
+			InputSystem.Update();
+			Assert.That(PhaseOf(finger), Is.EqualTo(TouchPhase.Moved));
+			Assert.That(finger.Position, Is.EqualTo(new Vector2(50, 60)));
+
+			finger.Release();
+			InputSystem.Update();
+			Assert.That(finger.State, Is.EqualTo(FingerState.Released));
+			Assert.That(PhaseOf(finger), Is.EqualTo(TouchPhase.Ended));
+		}
+
+		[Test]
+		public void ResetTouchscreenDoesNothingWithoutAFingerThatIsPressed()
+		{
+			_session = VirtualInput.Acquire();
+
+			_session.ResetTouchscreen();
+			Assert.That(InputSystem.devices, Is.Empty, "no touchscreen is added");
+
+			var changes = new System.Collections.Generic.List<InputChange>();
+			_session.Reader.Changed += changes.Add;
+			var released = _session.NewFinger();
+			released.Press(new Vector2(10, 20));
+			released.Release();
+			var unused = _session.NewFinger();
+			InputSystem.Update();
+			changes.Clear();
+
+			_session.ResetTouchscreen();
+			InputSystem.Update();
+
+			Assert.That(changes, Is.Empty);
+			Assert.That(PhaseOf(released), Is.EqualTo(TouchPhase.Ended));
+			Assert.That(unused.State, Is.EqualTo(FingerState.Queued), "a finger that was not pressed is left alone");
+			unused.Press(new Vector2(30, 40));
+			InputSystem.Update();
+			Assert.That(unused.State, Is.EqualTo(FingerState.Pressed));
 		}
 
 		[Test]

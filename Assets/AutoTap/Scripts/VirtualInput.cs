@@ -128,6 +128,27 @@ namespace UnityAutoTap
 		VirtualFinger NewFinger();
 
 		/// <summary>
+		/// Cancels every touch of the virtual touchscreen that is in progress, as the soft reset of a
+		/// <see cref="Touchscreen"/> by the Input System does.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// Every finger that was pressed and was not released or canceled yet is canceled, as
+		/// <see cref="VirtualFinger.Cancel"/> does: one event per finger, processed at the next input update. A finger
+		/// whose press is queued but not processed yet is canceled too. Nothing is queued if no finger is pressed.
+		/// </para>
+		/// <para>
+		/// The touches are over, as a touch of a real touchscreen is once it was canceled. The fingers cannot be used
+		/// any more: <see cref="VirtualFinger.MoveTo"/>, <see cref="VirtualFinger.Release"/> and the other calls that
+		/// change a touch throw <see cref="InvalidOperationException"/>, also when the owner of the finger makes them.
+		/// To touch again, press a new finger (<see cref="NewFinger"/>). This differs from
+		/// <see cref="VirtualDevice.ResetToDefault"/> of the other virtual devices, after which the device can be used
+		/// on.
+		/// </para>
+		/// </remarks>
+		void ResetTouchscreen();
+
+		/// <summary>
 		/// Gives a virtual pointer device other than a touchscreen.
 		/// </summary>
 		/// <param name="layout">The layout of a device derived from <see cref="Pointer"/>, for example <c>Mouse</c> or <c>Pen</c>.</param>
@@ -224,6 +245,13 @@ namespace UnityAutoTap
 		{
 			ThrowIfDisposed();
 			return _core.NewFinger();
+		}
+
+		/// <inheritdoc/>
+		public void ResetTouchscreen()
+		{
+			ThrowIfDisposed();
+			_core.ResetTouchscreen();
 		}
 
 		/// <inheritdoc/>

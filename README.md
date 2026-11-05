@@ -642,6 +642,13 @@ while it was not pressed. `Prediction` then tells which object receives the pres
 (`Dragging`), and what receives the click or the drop. `IsBeyondDragThreshold(position)` tells whether a move would start
 a drag.
 
+`ResetToDefault()` of a device writes the default value into every control that the soft reset of the Input System
+changes, with one event, and the device can be used on after it. The virtual touchscreen is reset with
+`IVirtualInput.ResetTouchscreen()` instead, as the Input System resets a touchscreen: every touch in progress, including
+one whose press is only queued, is canceled, with one event per finger. Nothing happens if no finger is pressed. The
+touches are over then, as a canceled touch of a real touchscreen is: `MoveTo`, `Release` and the other calls on those
+fingers throw `InvalidOperationException`. To touch again, press a new finger.
+
 `VirtualInput.IsVirtual(device)` tells a virtual device from a real one. `VirtualInput.TryGetNumber(device, out number)`
 gives the number that a virtual device was added with: the `number` of `GetPointer` and `GetDevice`, and 0 for the
 touchscreen. It returns `false` for a real device and for a virtual device that the virtual input does not hold any more,

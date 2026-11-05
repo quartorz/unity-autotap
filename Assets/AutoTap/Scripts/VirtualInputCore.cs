@@ -347,6 +347,18 @@ namespace UnityAutoTap
 			return created;
 		}
 
+		public void ResetTouchscreen()
+		{
+			ThrowIfTornDown();
+			foreach (var finger in _fingers.Values)
+			{
+				if (finger.CanRelease)
+				{
+					finger.Cancel();
+				}
+			}
+		}
+
 		static string KeyOf(string layout, int number)
 		{
 			return $"{layout.ToLowerInvariant()}#{number}";
