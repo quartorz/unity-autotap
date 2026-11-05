@@ -75,7 +75,8 @@ throws `ArgumentOutOfRangeException` for a number that is not a slot (0 to the n
 `Dispose`, `Start`, `SetupMarkers` and every `Simulate` throw `ObjectDisposedException`.
 
 Only one auto tap can be started at a time (`AutoTapBase.Current`); `Start` on another one throws
-`InvalidOperationException`.
+`InvalidOperationException`. `Current` is `null` when the application starts, also when Play Mode is entered without a
+domain reload.
 
 `Simulate` only queues input. The input module delivers it in the next frame, because the Input System processes events
 at the start of a frame (see [When input arrives](#when-input-arrives)).

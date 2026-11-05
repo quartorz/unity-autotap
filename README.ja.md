@@ -60,7 +60,7 @@ autoTap.Dispose();   // まだ動いていれば Stop を呼ぶ
 
 `SetupMarkers` はマーカーを出すだけです。スロットはコンストラクタで用意されるので、`SetupMarkers` を呼ばなくても `Start`、`Update`、`Simulate` は動きます。その場合は、指と pointer の位置を示すものが出ません。`SetupMarkers` はいつでも呼べます。auto tap が動いている間でもかまいません。2 回目の呼び出しは、1 回目のマーカーを置き換えます。canvas が `null` ならマーカーは出ません。`Simulate(slot, ...)` は、スロットでない番号（0 からスロットの数 - 1 まで）を渡すと `ArgumentOutOfRangeException` を投げます。`Dispose` のあとに `Start`、`SetupMarkers`、どの `Simulate` を呼んでも `ObjectDisposedException` を投げます。
 
-同時に開始できる auto tap は 1 つだけです（`AutoTapBase.Current`）。ほかの auto tap の `Start` を呼ぶと `InvalidOperationException` を投げます。
+同時に開始できる auto tap は 1 つだけです（`AutoTapBase.Current`）。ほかの auto tap の `Start` を呼ぶと `InvalidOperationException` を投げます。`Current` は、アプリケーションが起動したときには `null` です。ドメインのリロードなしで Play Mode に入ったときも同じです。
 
 `Simulate` は入力をキューに入れるだけです。Input System はフレームの頭でイベントを処理するので、input module が UI に届けるのは次のフレームです（[入力が届くタイミング](#入力が届くタイミング)を参照）。
 

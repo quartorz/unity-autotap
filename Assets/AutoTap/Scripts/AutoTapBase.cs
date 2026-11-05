@@ -53,7 +53,23 @@ namespace UnityAutoTap
 		/// <summary>
 		/// The instance that is started, or <c>null</c>.
 		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// It is <c>null</c> when the application starts, also when Play Mode is entered without a domain reload, in
+		/// which the static state of the earlier Play Mode is kept.
+		/// </para>
+		/// </remarks>
 		public static AutoTapBase Current { get; private set; }
+
+		/// <summary>
+		/// Forgets the instance that an earlier run left as <see cref="Current"/>, when Play Mode is entered without a
+		/// domain reload.
+		/// </summary>
+		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+		static void ResetCurrent()
+		{
+			Current = null;
+		}
 
 		protected internal static class ComponentFinder<T> where T : Component
 		{
