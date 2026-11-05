@@ -60,7 +60,7 @@ autoTap.Dispose();   // まだ動いていれば Stop を呼ぶ
 
 `SetupMarkers` はマーカーを出すだけです。スロットはコンストラクタで用意されるので、`SetupMarkers` を呼ばなくても `Start`、`Update`、`Simulate` は動きます。その場合は、指と pointer の位置を示すものが出ません。`SetupMarkers` はいつでも呼べます。auto tap が動いている間でもかまいません。2 回目の呼び出しは、1 回目のマーカーを置き換えます。canvas が `null` ならマーカーは出ません。`Simulate(slot, ...)` は、スロットでない番号（0 からスロットの数 - 1 まで）を渡すと `ArgumentOutOfRangeException` を投げます。`Dispose` のあとに `Start`、`SetupMarkers`、どの `Simulate` を呼んでも `ObjectDisposedException` を投げます。
 
-同時に開始できる auto tap は 1 つだけです（`AutoTapBase.Current`）。ほかの auto tap の `Start` を呼ぶと `InvalidOperationException` を投げます。`Current` は、アプリケーションが起動したときには `null` です。ドメインのリロードなしで Play Mode に入ったときも同じです。
+同時に開始できる auto tap は 1 つだけです（`AutoTapBase.Current`）。ほかの auto tap の `Start` を呼ぶと `InvalidOperationException` を投げます。`Current` は、アプリケーションが起動したときには `null` です。ドメインのリロードなしで Play Mode に入ったときも同じです。Play Mode を抜けるときとアプリケーションが終了するときは、動いている auto tap を、仮想デバイスを取り除く前に止める（`Stop`）ので、そのあとも `Current` は `null` です。そのとき `Stop` が投げた例外はログに出します。
 
 `Simulate` は入力をキューに入れるだけです。Input System はフレームの頭でイベントを処理するので、input module が UI に届けるのは次のフレームです（[入力が届くタイミング](#入力が届くタイミング)を参照）。
 
@@ -469,7 +469,7 @@ auto tap か、ほかの session が生きている間、仮想入力は Input S
 - **pointer の behavior は、すべてのプラットフォームで置き換わります。** `InputSystemUIInputModule` の `pointerBehavior` を `AllPointersAsIs` にし、あとで元に戻します。module の既定の behavior（`SingleMouseOrPenButMultiTouchAndTrack`）では、指とマウスを同時に使うと互いに邪魔をします。フレームで最初に変わった pointer が、残るものを決めます。指が押されている間にマウスが変わると、指の pointer は取り除かれ（その下の UI は `pointerExit` を受け取る）、押しはマウスの pointer の押しとして続き（ドラッグと、離しの `pointerUp` は、マウスの pointer id を持つ）、指の pointer id は `pointerUp` を受け取りません。
 - **`.current` が変わります。** 仮想デバイスは、Input System の本物のデバイスです。`Touchscreen.current`、`Keyboard.current`、`Mouse.current`、`Pointer.current`、`Gamepad.all`、`InputSystem.onDeviceChange`、`PlayerInput` が選んだ control scheme は、仮想デバイスが足されるか入力を受け取ったとたんに変わることがあり、取り除かれると元に戻ります。デバイスは最初に使われたときに足されるので、キーを押すだけの実行はタッチスクリーンを足しません。
 - **動いている間は、Editor のマウスとキーボードを使わないでください。** 本物のデバイスが入力を受け取ると、それがまた `.current` になり、`.current` を読むコードは、仮想入力ではなくあなたの手を読みます。実行が終わるまで、Editor のマウスとキーボードには触らないでください。
-- **後片付け。** 最後の session を手放す（`Stop`、`Dispose`）と、押されている指は持ち上げられ、変わるものがある仮想デバイスはすべて既定値に戻されて、キーとボタンは離されます。デバイスが取り除かれるのは、UI がそれを処理したあと、数回の入力更新のあとです。何も押されておらず、待っているイベントもなければ、すぐに取り除かれます。それまでは `VirtualInputSession.Reader` と `InputUpdated` が動き続けます。Play Mode を抜けると、すぐに取り除かれます。仮想デバイスの名前は `AutoTap-<layout>-<number>` です。前の実行が残したものは、アプリケーションが起動するとき、終了するとき、生きている session がない状態で session を取得するときに取り除かれます。
+- **後片付け。** 最後の session を手放す（`Stop`、`Dispose`）と、押されている指は持ち上げられ、変わるものがある仮想デバイスはすべて既定値に戻されて、キーとボタンは離されます。デバイスが取り除かれるのは、UI がそれを処理したあと、数回の入力更新のあとです。何も押されておらず、待っているイベントもなければ、すぐに取り除かれます。それまでは `VirtualInputSession.Reader` と `InputUpdated` が動き続けます。Play Mode を抜けると、動いている auto tap を止めたあと、すぐに取り除かれます。仮想デバイスの名前は `AutoTap-<layout>-<number>` です。前の実行が残したものは、アプリケーションが起動するとき、終了するとき、生きている session がない状態で session を取得するときに取り除かれます。
 - **描画の前に更新するデバイス**（一部の XR デバイス）は、イベントをキューに入れたフレームの before-render の更新で処理し、`InputChangeReader` はそこから報告します。auto tap は、そのデバイスの操作が処理されたのは、次の Dynamic の入力更新だと見なします。
 
 ## 対象外のもの

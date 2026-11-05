@@ -143,6 +143,7 @@ namespace UnityAutoTap
 
 		static void RemoveLeftoversAtQuit()
 		{
+			AutoTapBase.StopCurrentBeforeExit();
 			s_Instance?.TearDown();
 			RemoveLeftovers();
 		}
@@ -815,6 +816,7 @@ namespace UnityAutoTap
 
 		void OnQuitting()
 		{
+			AutoTapBase.StopCurrentBeforeExit();
 			TearDown();
 		}
 
@@ -823,6 +825,7 @@ namespace UnityAutoTap
 		{
 			if (change == PlayModeStateChange.ExitingPlayMode)
 			{
+				AutoTapBase.StopCurrentBeforeExit();
 				TearDown();
 			}
 		}

@@ -58,6 +58,10 @@ namespace UnityAutoTap
 		/// It is <c>null</c> when the application starts, also when Play Mode is entered without a domain reload, in
 		/// which the static state of the earlier Play Mode is kept.
 		/// </para>
+		/// <para>
+		/// When Play Mode is exited or the application quits, the instance is stopped (<see cref="Stop"/>) before the
+		/// virtual devices are removed, so it is <c>null</c> after that too.
+		/// </para>
 		/// </remarks>
 		public static AutoTapBase Current { get; private set; }
 
@@ -69,6 +73,33 @@ namespace UnityAutoTap
 		static void ResetCurrent()
 		{
 			Current = null;
+		}
+
+		/// <summary>
+		/// Stops <see cref="Current"/>, if there is one, when Play Mode is exited or the application quits. It is called
+		/// while the virtual devices are still there: <see cref="Stop"/> queues the release of what the operations hold,
+		/// which throws once the devices were removed.
+		/// </summary>
+		/// <remarks>
+		/// An exception that <see cref="Stop"/> throws, from <see cref="OnStop"/> for example, is logged, so that the
+		/// virtual devices are removed after it as well.
+		/// </remarks>
+		internal static void StopCurrentBeforeExit()
+		{
+			var current = Current;
+			if (current == null)
+			{
+				return;
+			}
+
+			try
+			{
+				current.Stop();
+			}
+			catch (Exception e)
+			{
+				Debug.LogException(e);
+			}
 		}
 
 		protected internal static class ComponentFinder<T> where T : Component
@@ -354,6 +385,10 @@ namespace UnityAutoTap
 		/// does nothing while this instance is not <see cref="Enabled"/>, so no log is built that could take them, and
 		/// <see cref="Start"/> discards them. For an operation that was started in a slot,
 		/// <see cref="OnTapCompleted"/> is called inside this method in either case.
+		/// </para>
+		/// <para>
+		/// When Play Mode is exited or the application quits while this instance is <see cref="Current"/>, this method
+		/// is called before the virtual devices are removed. An exception that it throws then is logged.
 		/// </para>
 		/// </remarks>
 		/// <exception cref="InvalidOperationException">This instance is not the current one.</exception>

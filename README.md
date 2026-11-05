@@ -76,7 +76,8 @@ throws `ArgumentOutOfRangeException` for a number that is not a slot (0 to the n
 
 Only one auto tap can be started at a time (`AutoTapBase.Current`); `Start` on another one throws
 `InvalidOperationException`. `Current` is `null` when the application starts, also when Play Mode is entered without a
-domain reload.
+domain reload. When Play Mode is exited or the application quits, the auto tap that is running is stopped (`Stop`) before
+the virtual devices are removed, so `Current` is `null` after that too. An exception that `Stop` throws then is logged.
 
 `Simulate` only queues input. The input module delivers it in the next frame, because the Input System processes events
 at the start of a frame (see [When input arrives](#when-input-arrives)).
@@ -664,7 +665,7 @@ The virtual input changes the Input System for as long as an auto tap, or any ot
   virtual device is returned to its defaults where that changes something, so the keys and buttons are released. The
   devices are removed after the UI processed that, a few input updates later. If nothing is pressed and no event is
   waiting, they are removed at once. `VirtualInputSession.Reader` and `InputUpdated` keep working until then. Leaving Play
-  Mode removes them at once. Virtual devices are named `AutoTap-<layout>-<number>`; the ones that an earlier run left
+  Mode removes them at once, after it stopped the auto tap that is running. Virtual devices are named `AutoTap-<layout>-<number>`; the ones that an earlier run left
   behind are removed when the application starts, when it quits, and when a session is acquired and none was alive.
 - **Devices that update before render** (some XR devices) process their events in the before-render update of the frame
   they were queued in, and `InputChangeReader` reports them from there. The auto tap decides that an operation on such a

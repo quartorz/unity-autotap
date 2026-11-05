@@ -41,6 +41,8 @@ namespace UnityAutoTap
 	/// Virtual devices that a previous run left behind are removed at start-up, when a session is acquired while none
 	/// is alive, and at <see cref="UnityEngine.Application.quitting"/>. In the Editor, the virtual devices that are
 	/// still there when Play Mode is exited are removed at that point, without waiting for a release to be processed.
+	/// When the application quits and when Play Mode is exited, the auto tap that is running
+	/// (<see cref="AutoTapBase.Current"/>) is stopped before the devices are removed.
 	/// </para>
 	/// <para>
 	/// While virtual devices exist, <c>Touchscreen.current</c>, <c>Keyboard.current</c>, <c>Mouse.current</c>,
