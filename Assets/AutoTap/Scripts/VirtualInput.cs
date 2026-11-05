@@ -77,6 +77,30 @@ namespace UnityAutoTap
 		{
 			return device != null && VirtualInputCore.IsVirtualName(device.name);
 		}
+
+		/// <summary>
+		/// Gives the number of a virtual device: the <c>number</c> that tells it apart from the other devices of its
+		/// layout, as passed to <see cref="IVirtualInput.GetPointer(string, int)"/>,
+		/// <see cref="IVirtualInput.GetDevice(string, int)"/> or their generic forms. The virtual touchscreen, whose
+		/// fingers <see cref="IVirtualInput.NewFinger"/> gives, has the number 0.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// The number is the one that the device was added with. It is known while the virtual input holds the device:
+		/// from the time the device is added until it is removed.
+		/// </para>
+		/// </remarks>
+		/// <param name="device">The device to examine.</param>
+		/// <param name="number">The number of the device, or 0 if this method returns <c>false</c>.</param>
+		/// <returns>
+		/// <c>true</c> for a device that the virtual input holds. <c>false</c> for a real device, for <c>null</c>, and for
+		/// a virtual device that was removed or that an earlier run left behind (<see cref="IsVirtual"/> is <c>true</c>
+		/// for these).
+		/// </returns>
+		public static bool TryGetNumber(InputDevice device, out int number)
+		{
+			return VirtualInputCore.TryGetNumber(device, out number);
+		}
 	}
 
 	/// <summary>

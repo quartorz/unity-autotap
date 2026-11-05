@@ -48,6 +48,7 @@ namespace UnityAutoTap
 		readonly List<ButtonTrack> _touchedTracks = new List<ButtonTrack>();
 		readonly Dictionary<string, VirtualDevice> _virtualDevices = new Dictionary<string, VirtualDevice>();
 		readonly Dictionary<InputDevice, VirtualDevice> _byDevice = new Dictionary<InputDevice, VirtualDevice>();
+		readonly Dictionary<InputDevice, int> _numbers = new Dictionary<InputDevice, int>();
 		readonly List<VirtualFinger> _settled = new List<VirtualFinger>();
 		readonly Dictionary<InputSystemUIInputModule, UIPointerBehavior> _modules =
 			new Dictionary<InputSystemUIInputModule, UIPointerBehavior>();
@@ -120,6 +121,21 @@ namespace UnityAutoTap
 		public static string DeviceName(string layout, int number)
 		{
 			return $"{NamePrefix}{layout}-{number}";
+		}
+
+		/// <summary>
+		/// Finds the number that a device of the virtual input that is alive was added with.
+		/// </summary>
+		public static bool TryGetNumber(InputDevice device, out int number)
+		{
+			var core = s_Instance;
+			if (device != null && core != null && core._numbers.TryGetValue(device, out number))
+			{
+				return true;
+			}
+
+			number = 0;
+			return false;
 		}
 
 		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -321,6 +337,7 @@ namespace UnityAutoTap
 			{
 				_touchscreen = (Touchscreen)InputSystem.AddDevice("Touchscreen", DeviceName("Touchscreen", 0));
 				_devices.Add(_touchscreen);
+				_numbers[_touchscreen] = 0;
 			}
 
 			var touchId = s_NextTouchId;
@@ -482,7 +499,7 @@ namespace UnityAutoTap
 			}
 
 			var created = new VirtualPointer(this, inputPointer);
-			Register(KeyOf(layout, number), created);
+			Register(KeyOf(layout, number), number, created);
 			return created;
 		}
 
@@ -495,7 +512,7 @@ namespace UnityAutoTap
 			}
 
 			var created = new VirtualDevice(this, device);
-			Register(KeyOf(layout, number), created);
+			Register(KeyOf(layout, number), number, created);
 			return created;
 		}
 
@@ -511,10 +528,11 @@ namespace UnityAutoTap
 			}
 		}
 
-		void Register(string key, VirtualDevice device)
+		void Register(string key, int number, VirtualDevice device)
 		{
 			_virtualDevices[key] = device;
 			_byDevice[device.Device] = device;
+			_numbers[device.Device] = number;
 			_devices.Add(device.Device);
 		}
 
@@ -893,6 +911,7 @@ namespace UnityAutoTap
 			_touchedTracks.Clear();
 			_virtualDevices.Clear();
 			_byDevice.Clear();
+			_numbers.Clear();
 
 			foreach (var pair in _modules)
 			{

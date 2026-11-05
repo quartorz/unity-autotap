@@ -642,7 +642,10 @@ while it was not pressed. `Prediction` then tells which object receives the pres
 (`Dragging`), and what receives the click or the drop. `IsBeyondDragThreshold(position)` tells whether a move would start
 a drag.
 
-`VirtualInput.IsVirtual(device)` tells a virtual device from a real one. `AutoTapBase` also has a constructor that takes
+`VirtualInput.IsVirtual(device)` tells a virtual device from a real one. `VirtualInput.TryGetNumber(device, out number)`
+gives the number that a virtual device was added with: the `number` of `GetPointer` and `GetDevice`, and 0 for the
+touchscreen. It returns `false` for a real device and for a virtual device that the virtual input does not hold any more,
+or that an earlier run left behind. `AutoTapBase` also has a constructor that takes
 the number of slots and an `IVirtualInput` (`AutoTapBase(int slotCount, IVirtualInput input)`), so that a session can be
 shared with it; the caller disposes the session then.
 

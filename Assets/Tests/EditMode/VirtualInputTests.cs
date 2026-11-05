@@ -50,6 +50,52 @@ namespace UnityAutoTap.Tests
 		}
 
 		[Test]
+		public void TryGetNumberGivesTheNumberThatADeviceWasAddedWith()
+		{
+			_session = VirtualInput.Acquire();
+			var keyboard = _session.GetDevice<Keyboard>(2).Device;
+			var gamepad = _session.GetDevice("Gamepad").Device;
+			var mouse = _session.GetPointer<Mouse>(-1).Device;
+			var pen = _session.GetPointer("Pen", 12).Device;
+			_session.NewFinger();
+			var touchscreen = Touchscreen.current;
+
+			Assert.That(VirtualInput.TryGetNumber(keyboard, out var keyboardNumber), Is.True);
+			Assert.That(keyboardNumber, Is.EqualTo(2));
+			Assert.That(VirtualInput.TryGetNumber(gamepad, out var gamepadNumber), Is.True);
+			Assert.That(gamepadNumber, Is.EqualTo(0));
+			Assert.That(VirtualInput.TryGetNumber(mouse, out var mouseNumber), Is.True);
+			Assert.That(mouseNumber, Is.EqualTo(-1));
+			Assert.That(VirtualInput.TryGetNumber(pen, out var penNumber), Is.True);
+			Assert.That(penNumber, Is.EqualTo(12));
+			Assert.That(VirtualInput.TryGetNumber(touchscreen, out var touchscreenNumber), Is.True);
+			Assert.That(touchscreenNumber, Is.EqualTo(0));
+		}
+
+		[Test]
+		public void TryGetNumberIsFalseForRealDevicesNullAndVirtualDevicesThatAreNotHeld()
+		{
+			var real = InputSystem.AddDevice<Keyboard>();
+			_session = VirtualInput.Acquire();
+			var leftover = InputSystem.AddDevice("Keyboard", "AutoTap-Keyboard-3");
+			var removed = _session.GetDevice<Gamepad>(1).Device;
+
+			Assert.That(VirtualInput.TryGetNumber(real, out var realNumber), Is.False);
+			Assert.That(realNumber, Is.EqualTo(0));
+			Assert.That(VirtualInput.TryGetNumber(null, out _), Is.False);
+			Assert.That(VirtualInput.IsVirtual(leftover), Is.True);
+			Assert.That(VirtualInput.TryGetNumber(leftover, out _), Is.False, "the virtual input did not add it");
+			Assert.That(VirtualInput.TryGetNumber(removed, out _), Is.True);
+
+			_session.Dispose();
+			_session = null;
+
+			Assert.That(removed.added, Is.False, "nothing was pressed, so the device is removed at once");
+			Assert.That(VirtualInput.TryGetNumber(removed, out var removedNumber), Is.False);
+			Assert.That(removedNumber, Is.EqualTo(0));
+		}
+
+		[Test]
 		public void AtMostTenFingersAreGivenAtATime()
 		{
 			_session = VirtualInput.Acquire();
